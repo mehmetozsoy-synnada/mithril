@@ -374,12 +374,9 @@ class StaticDataStore(GenericDataType[DataType]):
 
                 if self.backend.is_manualgrad:
                     data = self._all_data[value]
-                    # _temp_shape = data._temp_shape
-                    # _temp_shape = next(iter(data.shape.reprs))
                     if is_make_array_required(data):
                         static_value = self.backend.array(static_value)
 
-                # queue |= self.add_static_data(value, static_value)
                 _queue, _updates = self.add_static_data(value, static_value)
                 queue |= _queue
                 updates |= _updates

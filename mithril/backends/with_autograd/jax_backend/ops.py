@@ -238,7 +238,6 @@ def sign(input: jax.Array) -> jax.Array:
 
 
 def robust_sqrt(input: jax.Array, cutoff: jax.Array) -> jax.Array:
-    # v_mapped_func= jax.vmap(partial(robust_log_helper, threshold = cutoff))
     v_mapped_func = vmapper(
         partial(robust_sqrt_helper, threshold=cutoff), len(input.shape) - 1
     )
@@ -252,7 +251,6 @@ def robust_sqrt(input: jax.Array, cutoff: jax.Array) -> jax.Array:
 # undefined points (log(0) = -inf in this case),
 # further testing should be done about performance.
 def robust_log(input: jax.Array, cutoff: jax.Array) -> jax.Array:
-    # v_mapped_func= jax.vmap(partial(robust_log_helper, threshold = cutoff))
     v_mapped_func = vmapper(
         partial(robust_log_helper, threshold=cutoff), len(input.shape) - 1
     )
@@ -568,13 +566,11 @@ def scaled_dot_product_attention(
         assert attn_mask is None
         temp_mask = jnp.tril(jnp.ones((L, S), dtype=bool))
         attn_bias = jnp.where(temp_mask, attn_bias, float("-inf"))
-        # attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
         attn_bias.astype(query.dtype)
 
     if attn_mask is not None:
         if attn_mask.dtype == bool:
             attn_bias = jnp.where(attn_mask, attn_bias, float("-inf"))
-            # attn_bias.masked_fill_(attn_mask.logical_not(), float("-inf"))
         else:
             attn_bias += attn_mask
     attn_weight = query @ key.swapaxes(-2, -1) * scale_factor
@@ -930,11 +926,7 @@ def tsne_p_joint(
 
 
 def cholesky(input: jax.Array) -> jax.Array:
-    # try:
     return jnp.linalg.cholesky(input)
-    # except:
-    #     logging.info("CHOLESKY FACTORIZATION DOES NOT EXIST!!!")
-    # return None
 
 
 def gpr_alpha(label_mu_diff: jax.Array, L: jax.Array, K_term: jax.Array) -> jax.Array:

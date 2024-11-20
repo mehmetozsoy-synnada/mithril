@@ -202,10 +202,6 @@ def get_deterministic_shape(node: ShapeNode):
         return node.get_shapes(uni, var)
 
 
-# def get_all_nodes(model: BaseModel):
-#     return {con.metadata.data.shape for con in model.conns.all.values()}
-
-
 def assert_all_nodes_unique(model: BaseModel):
     """Asserts if all nodes in a given model is unique.
     Extract all unique nodes found in a model, After all unique nodes
@@ -680,13 +676,6 @@ def test_linear_1_static_shapes():
     assert_shapes(ctx, logical_ref, physical_ref, shapes=shapes, check_all_shapes=True)
 
 
-# '$_MatrixMultiply_0_output': ['(V1, ...)', 'u1', 'u2'],
-# 'input': [['(V1, ...)', 'u1', 'u3'], ['u4', '(V2, ...)', 'u3']],
-# 'w': ['u3', 'u2'],
-# 'b': ['u2'],
-# 'output': [['(V1, ...)', 'u1', 'u2'], ['u4', '(V2, ...)', 'u2']]
-
-
 def test_linear_1_static_inputs():
     model = Linear()
     static_inputs = {
@@ -754,14 +743,12 @@ def test_simple_composite_1_set_shapes():
         "output": [2, 2],
         "left": None,
         inner_left_key: [1, 1],
-        # 'Multiply_0_left': [1, 1]
     }
     physical_ref = {
         "input2": [2, 2],
         "output": [2, 2],
         "left": None,
         inner_left_key[1:]: [1, 1],
-        # 'Multiply_0_left': [1, 1]
     }
     assert_shapes(model, logical_ref, physical_ref)
 
@@ -6642,17 +6629,6 @@ def test_total_repr_count_1():
             if value.default is not inspect.Parameter.empty
         }
 
-    # def get_defaults(fn):
-    #     if fn.__defaults__ is None:
-    #         return {}
-    #     return dict(
-    #         zip(
-    #             fn.__code__.co_varnames[-len(fn.__defaults__) :],
-    #             fn.__defaults__,
-    #             strict=False,
-    #         )
-    #     )
-
     def find_all_reprs(repr: ShapeRepr, repr_cache=None) -> set[ShapeRepr]:
         # this function find all ShapeRepr objects which is referenced by
         # the given ShapeRepr object
@@ -9626,10 +9602,6 @@ def test_update_possible_values_31():
     var.update_possible_values(PossibleValues(uniadics, [dnf1, dnf2]))
 
     # Check vars_dicts are filled with right lengths
-    # assert uni1.metadata.vars_dict == {var: {3}}
-    # assert uni2.metadata.vars_dict == {var: {3}}
-    # assert uni3.metadata.vars_dict == {var: {3}}
-    # assert my_uni.metadata.vars_dict == {var: {3}}
     root = repr.root  # var is updated by extract variadic
     assert root is not None
     assert uni1.metadata.vars_dict[root] == {0}
@@ -9789,10 +9761,6 @@ def test_bcast_4():
 
     add2.set_shapes({"output": ["a", "b"]})
 
-    # add2.set_shapes({
-    #     "output": [3, 5]
-    # })
-
     model += add1()
     model += add2(left=add1.output, right=add1.right)
     ref_shapes: dict[str, list] = {
@@ -9801,12 +9769,6 @@ def test_bcast_4():
         "$input": [1, 1],
         "$right_1": ["(V1, ...)"],
     }
-    # ref_shapes = {
-    #     '$_Add_0_output': [3, 5],
-    #     '$_Add_1_output': [3, 5],
-    #     '$input': [1, 1],
-    #     '$right_1': ['(V1, ...)']
-    # }
     assert_shapes(model, ref_shapes)
 
 

@@ -13,11 +13,3 @@
 # limitations under the License.
 
 
-# def test_1():
-#     model = Model()
-#     model += Add()(3, 4)
-#     model += Add()(left = "a", right = "b")
-#     model2 = Model()
-#     model2 += model(a = 2)
-#     model2 += Sqrt(robust=True)(robust = "output")
-#     ...

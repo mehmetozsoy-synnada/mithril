@@ -146,10 +146,6 @@ def squared_error(input: DataType, target: DataType, cache: CacheType = None):
     return (input - target) ** 2
 
 
-# def transpose(input: DataType, cache: CacheType = None) :
-#     return input.T
-
-
 def transpose(
     input: DataType,
     axes: list[int] | tuple[int, ...] | None = None,

@@ -269,8 +269,6 @@ def model_to_dict(model: BaseModel) -> dict:
         submodels[model_id] = model_to_dict(submodel)
 
         # Store submodel connections
-        # for key, conn in submodel.connections.items():
-        # submodel_connections.setdefault(conn.metadata, [model_id, key])
         for key in submodel._all_keys:
             submodel_connections.setdefault(
                 submodel.conns._get_metadata(key), [model_id, key]
@@ -356,8 +354,6 @@ def train_model_to_dict(context: TrainModel) -> dict:
         # TODO: check if get_local_key to get keys required?
         for key, value in loss["args"].items():
             if isinstance(value, Connection):
-                # local_key = get_local_key(context._model, value)
-                # loss["args"][key] = local_key
                 loss["args"][key] = value.data.key
 
         if len(loss["args"]) > 0:
@@ -371,8 +367,6 @@ def train_model_to_dict(context: TrainModel) -> dict:
         regularization_dict["reg_key"] = regularization["reg_key"]
         for key, value in regularization["args"].items():
             if isinstance(value, Connection):
-                # local_key = get_local_key(context._model, value)
-                # regularization["args"][key] = local_key
                 regularization["args"][key] = value.key
             elif isinstance(value, re.Pattern):
                 regularization["args"][key] = {"pattern": value.pattern}

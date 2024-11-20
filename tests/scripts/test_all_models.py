@@ -153,8 +153,6 @@ def compile_and_compare(
                 for key, value in pm.get_shapes(symbolic=False).items()
             }
             numeric_shape_dict.pop("final_cost", None)
-            # if model_shape_dict.get("loss") is not None:
-            #     numeric_shape_dict["loss"] = final_loss_shape
             for key, value in numeric_shape_dict.items():
                 assert value == model_shape_dict[key]
 

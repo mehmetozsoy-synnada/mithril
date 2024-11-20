@@ -2410,7 +2410,6 @@ def arange_constraints(
                 "have at most 1 dim."
             )
     # TODO: Should we try to infer step if start, stop value and output shape is known?
-    # updated_symbols -= new_shape_items
     return status, updates
 
 
@@ -3110,7 +3109,6 @@ def item_constraints(output: Scalar, input: Tensor) -> ConstrainResultType:
             )
         elif val is None:
             uni.set_value(1)
-            # updated_symbols |= uni
             updates.add(uni)
     # If input is all inferred, set status to True.
     if input_shape.root is None:

@@ -205,7 +205,6 @@ def mlp_v_jax(
 ):
     lr = 0.001
     _input_shape, batch_size = input_shape
-    # batch_size, input_shape = input_shape[-1], input_shape[0]
     output_shape = [_input_shape] + [dimensions[-1]]
     device = "cpu"
     dtype_jax = getattr(jnp, f"float{precision}")

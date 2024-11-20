@@ -171,8 +171,8 @@ def test_generate_input_keys_0():
 
 def test_generate_input_keys_1():
     model = Model()
-    # key_mappings = model._generate_keys(include_internals = False)
-    # assert key_mappings == {}
+    key_mappings = model._generate_keys(include_internals=False)
+    assert key_mappings == {}
 
     model += Linear(10)
     key_mappings = model._generate_keys(include_internals=False)

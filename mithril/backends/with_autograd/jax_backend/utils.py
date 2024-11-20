@@ -63,8 +63,6 @@ def vmapper(func: Callable, count: int) -> Callable:
 def robust_power_under_threshold(
     input1: jax.Array, input2: jax.Array, threshold: jax.Array
 ) -> jax.Array:
-    # slope = input2 * (threshold ** (input2))
-    # return threshold ** input2 + slope * (input1/threshold - 1)
     return (1 / threshold) * jnp.maximum(input1, -input1)
 
 

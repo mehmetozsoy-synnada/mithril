@@ -2142,11 +2142,6 @@ class DistanceEncoder(Model):
 
         self.input.set_differentiable(False)
         self._freeze()
-        # self._set_shapes(trace=False,
-        #     input = ["N", "M"], # NOTE: Here "M" denotes input dim or
-        #     sample size ("N") depending on input_type.
-        #     coords = ["N", "d"]
-        # )
 
     def __call__(  # type: ignore[override]
         self,

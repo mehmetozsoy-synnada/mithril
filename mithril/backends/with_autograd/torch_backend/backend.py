@@ -121,16 +121,12 @@ class TorchBackend(ParallelBackend[torch.Tensor]):
         """
         return data.to(device)
 
-    # def block_until_ready(self, data: ArrayType | None = None) -> None:
-    #     getattr(torch, f"{self.device_type.lower()}").synchronize()
-
     def empty_cache(self) -> None:
         """Empty the cache on the device."""
         if self._device in ["MPS", "CUDA"]:
             getattr(torch, f"{self._device.lower()}").empty_cache()
         else:
             pass
-            # print(f"Warning: empty_cache is not implemented for {self.device_type}")
 
     def _creation_fn_wrapper(self, fn: Callable) -> Callable:
         """

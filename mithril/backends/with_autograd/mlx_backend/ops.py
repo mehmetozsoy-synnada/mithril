@@ -260,7 +260,6 @@ def robust_power(base: mx.array, exponent: mx.array, threshold: mx.array) -> mx.
 
 
 def stable_reciprocal(input: mx.array, cutoff: mx.array) -> mx.array:
-    # cutoff = cutoff.item()
     cond = mx.abs(input) < cutoff
     return mx.where(
         cond,
@@ -540,13 +539,11 @@ def scaled_dot_product_attention(
         assert attn_mask is None
         temp_mask = mx.tril(mx.ones((L, S), dtype=mx.bool_), k=0)  # type: ignore
         attn_bias = mx.where(temp_mask, attn_bias, float("-inf"))
-        # attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
         attn_bias.astype(query.dtype)
 
     if attn_mask is not None:
         if attn_mask.dtype == bool:
             attn_bias = mx.where(attn_mask, attn_bias, float("-inf"))
-            # attn_bias.masked_fill_(attn_mask.logical_not(), float("-inf"))
         else:
             attn_bias += attn_mask
     attn_weight = query @ key.swapaxes(-2, -1) * scale_factor
@@ -855,7 +852,6 @@ def nan_to_num(
     neginf: int | float | None,
 ):
     raise NotImplementedError("nan_to_num is not implemented in mlx!")
-    # return mx.nan_to_num(input, nan = nan, posinf = posinf, neginf = neginf)
 
 
 def astype(input: mx.array, dtype: core.Dtype | int) -> mx.array:

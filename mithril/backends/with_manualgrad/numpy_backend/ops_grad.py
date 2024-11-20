@@ -798,20 +798,6 @@ def stop_gradient_grad(
     return np.zeros_like(output_gradient)
 
 
-# def tensor_slice_grad(output_gradient: np.ndarray,
-#                       cache: CacheType,
-#                       idx: int,
-#                       *inputs: np.ndarray, -> np.ndarray:
-#     verify_shapes(inputs, idx)
-#     input1, input2 = inputs
-#     if idx == 0:
-#         grad = np.zeros_like(input1)
-#         grad[:input2.shape[0], ...] = output_gradient
-#         return grad
-#     elif idx == 1:
-#         return np.zeros_like(input2)
-
-
 def tensor_slice_grad(
     output_gradient: np.ndarray,
     cache: CacheType,
@@ -1291,21 +1277,6 @@ def polynomial_features_grad(
     )
 
 
-# def ones_with_zero_diag_grad(output_gradient: np.ndarray,
-#                              cache: CacheType,
-#                              idx: int,
-#                              *inputs: np.ndarray, -> np.ndarray:
-#     verify_shapes(inputs, idx)
-#     return np.zeros_like(inputs[0])
-
-# def eye_grad(output_gradient: np.ndarray,
-#              cache: CacheType,
-#              idx: int,
-#              *inputs: np.ndarray, -> np.ndarray:
-#     # TODO: Remove gradient formula!!!
-#     return np.zeros_like(inputs[0])
-
-
 def cholesky_grad(
     output_gradient: np.ndarray,
     cache: CacheType,
@@ -1326,18 +1297,6 @@ def gpr_alpha_grad(
     verify_shapes(inputs, idx)
     label_mu_diff, L, K_term = inputs
     raise NotImplementedError()
-
-    # if L is not None:
-    #     l_inv = np.linalg.inv(L)
-    #     diff_grad = l_inv.T @ l_inv @ output_gradient
-    #     # (np.kron(l_inv.T, (l_inv.T @ l_inv @ label_mu_diff)) \
-    #  @ output_gradients.reshape(-1,1)).reshape(2,2)
-    #     # np.tril(-l_inv.T @ ((l_inv @ np.array(label_mu_diff)) \
-    #  @ np.array([[3.0, 2]])) @ l_inv.T)
-    # else:
-    #     # IMPLEMENT
-    #     return
-    # return None
 
 
 def eigvalsh_grad(
@@ -1383,8 +1342,6 @@ def gpr_v_outer_grad(
             v = slin.solve_triangular(l_, k_, lower=True)
             v_grad = (output_gradient @ v.T).T + v @ output_gradient
             l_inv = np.linalg.inv(l_)
-            # K_grad = (np.kron(l_inv.T, np.eye(2))
-            # @ v_grad.reshape(-1,1)).reshape(2,2)
             k_grad = l_inv.T @ v_grad
             return k_grad
         else:
@@ -1399,8 +1356,6 @@ def gpr_v_outer_grad(
     elif idx == 2:
         if l_ is not None:
             l_inv = np.linalg.inv(l_)
-            # L_grad = (np.kron(l_inv.T,
-            # (l_inv @ k_)) @ v_grad.reshape(-1,1)).reshape(2,2)
             l_grad = np.tril(-l_inv.T @ (output_gradient @ k_.T) @ l_inv.T)
             return l_grad
         else:
@@ -1505,16 +1460,6 @@ def variance_grad(
             * (input - np.mean(input, axis=axis, keepdims=True))
             * output_gradient
         )
-
-
-# def shape_grad(output_gradient: np.ndarray,
-#                cache: CacheType,
-#                idx: int,
-#                *inputs: np.ndarray, -> np.ndarray:
-#     if idx == 0:
-#         return np.zeros_like(inputs[0])
-#     else:
-#         return gradient_exception(idx)
 
 
 def reshape_grad(
@@ -1635,34 +1580,6 @@ def nan_to_num_grad(
     raise RuntimeError(
         "Numpy nan_to_num primitive grad operation. Something went wrong!"
     )
-
-
-# def index_grad(output_gradient: np.ndarray,
-#                cache: CacheType,
-#                idx: int,
-#                *inputs: np.ndarray, -> np.ndarray:
-#     if idx == 0:
-#         input, index = inputs
-#         grad = np.zeros(input.shape)
-#         grad[index] = output_gradient
-#         return grad
-#     else:
-#         return gradient_exception(idx)
-
-# def sequence_slice_grad(output_gradient: np.ndarray,
-#                      cache: CacheType,
-#                      idx: int,
-#                      *inputs: np.ndarray, -> np.ndarray:
-#     if idx == 0:
-#         input, *_ = inputs
-#         start_idx = cache["start_idx"]
-#         stop_idx = cache["stop_idx"]
-#         step_size = cache["step_size"]
-#         grad = np.zeros_like(input)
-#         grad[start_idx: stop_idx: step_size] = output_gradient
-#         return gradf
-#     else:
-#         return gradient_exception(idx)
 
 
 def split_grad(

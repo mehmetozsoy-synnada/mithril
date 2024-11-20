@@ -28,8 +28,6 @@ from ..core import (
     Constant,
     DataType,
     Dtype,
-    # data_types,
-    # is_tensor_type,
     GenericDataType,
     constant_type_table,
     epsilon_table,
@@ -113,15 +111,6 @@ class NotAvailable(SingletonObject):
     pass
 
 
-# class ToBeDetermined(SingletonObject):
-#     """
-#     A singleton class representing a null data indicating
-#     that no data is provided.
-#     """
-
-#     pass
-
-
 class ToBeDetermined(SingletonObject):
     """
     A singleton class representing a null data indicating
@@ -134,9 +123,6 @@ class ToBeDetermined(SingletonObject):
 NOT_GIVEN = NullConnection()
 NOT_AVAILABLE = NotAvailable()
 TBD = ToBeDetermined()
-# TBD = ToBeDetermined()
-# TBD = TBD
-# ToBeDetermined = ToBeDetermined
 
 
 class UpdateType(Enum):
@@ -532,7 +518,6 @@ def _get_shapes(
 class BaseData:
     def __init__(self, type: type[TensorValueType] | ScalarType) -> None:
         self._type = type
-        # self.shape: ShapeNode | None = None
         self._logical_data = True  # Every data starts as logical data.
         self.shape_constraints: set[Constraint] = set()
         self.type_constraints: set[Constraint] = set()
@@ -745,11 +730,6 @@ class Tensor(BaseData, GenericDataType[DataType]):
                 raise ValueError(
                     f"Value is set before as {self.temp_value}. Can not be reset."
                 )
-            # if self.value is TBD and value is None:
-            #     raise ValueError(
-            #         "Already set as non-differentiable. Can not be reverted \
-            #         to a differentiable state."
-            #     )
             self.value = value
         else:
             if self.temp_value is not TBD and self.temp_value != value:
@@ -1352,9 +1332,6 @@ class Connections:
             self._connection_dict[_type].pop(connection.key, None)
 
     def get_data(self, key: str) -> Scalar | Tensor:
-        # if (metadata := self._get_metadata(key)) is not None:
-        #     return metadata.data
-        # raise KeyError(f"Key {key} is not found in connections.")
         return self._get_metadata(key).data
 
     def get_non_diff_keys(self):
@@ -2057,7 +2034,6 @@ class Variadic:
                 return updates
 
         elif self.possibles == {}:
-            # raise ValueError("Possible values of Variadic could not be empty!")
             raise ValueError("Incompatible possible values for Variadic!")
 
         updates |= self.extract_uniadics()
@@ -2104,11 +2080,6 @@ def subset_match(sub_repr: ShapeRepr, main_repr: ShapeRepr):
 
 def are_unis_identical(unis1: list[Uniadic], unis2: list[Uniadic]):
     for uni1, uni2 in zip(unis1, unis2, strict=False):
-        # if (
-        #     uni1.possible_values is None
-        #     or uni2.possible_values is None
-        #     or uni1.possible_values & uni2.possible_values == set()
-        # ):
         if (
             uni1.possible_values is not None
             and uni2.possible_values is not None
@@ -2235,7 +2206,6 @@ class ShapeNode:
                     updates.constraints[UpdateType.SHAPE] |= tensor.shape_constraints
 
             for repr in resolved_reprs:
-                # remove_repr_from_symbols(repr)
                 repr.clear()
 
         return updates
@@ -2633,7 +2603,6 @@ class ShapeRepr:
             updates |= self._update_uniadics(self.prefix, uniadics)
             updates |= self._update_uniadics(self.reverse, uniadics[::-1])
             updates |= self.remove_variadic(uniadics)
-            # updates -= set(uniadics)
         else:
             if len(values) != len(self.prefix):
                 raise ValueError(
@@ -2659,11 +2628,6 @@ class ShapeRepr:
         # self.node.reprs.remove(self)
 
 
-# # Below functions are used in various constraints.
-# prod_fn = lambda a, b: (a if isinstance(a, int) else a.value) * (b if
-# isinstance(b, int) else b.value)
-# is_repr_known = lambda repr: repr.root is None and repr.prefix and
-# all([uni.value is not None for uni in repr.prefix])
 @dataclass
 class Constraint:
     fn: Callable

@@ -127,8 +127,6 @@ def test_composite_1_extend_from_inputs():
     layer2 = Layer(dimension=2, activation=Softmax())
 
     # setting up the model by extend method
-    # model.extend(layer1, input = "input", w = "w0", b = "b0")
-    # model.extend(layer2, input = layer1.output, w = "w1", b = "b1")
     model += layer2(w="w1", b="b1", output=IOKey(name="output"))
     model += layer1(output=layer2.input, w="w0", b="b0", input="input")
 
@@ -161,8 +159,6 @@ def test_composite_1_extend_from_inputs():
     layer2 = Layer(dimension=2, activation=Softmax())
 
     # setting up the model by extend method
-    # model.extend(layer1, input = "input", w = "w0", b = "b0")
-    # model.extend(layer2, input = layer1.output, w = "w1", b = "b1")
     model += layer1(w="w0", b="b0", input="input")
     model += layer2(input=layer1.output, w="w1", b="b1", output=IOKey(name="output"))
 
@@ -392,7 +388,6 @@ def test_1_set_shapes_bug():
 
 def test_2_set_shapes_bug():
     model = Model()
-    # model.extend(Convolution(shapes={"input2": [16, 3, 1, 1]}, padding=1, stride = 1))
     linear1 = Linear()
     linear2 = Linear()
     model += linear1(input="input")
@@ -838,7 +833,6 @@ def test_canonical_input_1():
     assert model.canonical_output.data == model.conns.get_con_by_metadata(
         linear.output.data.metadata
     )
-    # assert model.canonical_output.key == 'Linear_0_output'
 
 
 def test_canonical_input_2():
@@ -855,7 +849,6 @@ def test_canonical_input_2():
     assert model.canonical_output.data == model.conns.get_con_by_metadata(
         linear.output.data.metadata
     )
-    # assert model.canonical_output.key == 'LogisticRegression_1_output'
 
 
 def test_canonical_input_3():
@@ -873,7 +866,6 @@ def test_canonical_input_3():
     assert model.canonical_output.data == model.conns.get_con_by_metadata(
         linear.output.data.metadata
     )
-    # assert model.canonical_output.key == 'Linear_0_output'
 
 
 def test_canonical_input_5():
@@ -966,7 +958,6 @@ def test_canonical_dual_iadd_op():
     assert model.canonical_output.data == model.conns.get_con_by_metadata(
         c4.output.data.metadata
     )
-    # assert model.canonical_output.key == 'Convolution2D_2_output'
 
 
 def test_canonical_input_naming():
@@ -1381,8 +1372,6 @@ def test_check_static_1():
         jit=False,
         inference=True,
     )
-    # inputs = {"w": np.array([[4.0], [5.0]]),
-    #           "b": np.array([3.0])}
     outputs = comp_model.evaluate()
     ref_out = outputs["output"]
     np.testing.assert_array_equal(ref_out, np.array([[26.0], [27.0]]))
@@ -2202,8 +2191,7 @@ def test_get_key_dependency_1():
     resulting_connections = {
         con.key for con in ctx.dependency_map.get_dependent_input_conns("my_loss")
     }
-    # assert resulting_connections == {"Mean_4_axis", "b", "input", "Mean_4_keepdim",
-    # "target", "w"}
+
     assert resulting_connections == {"target", "input", "w", "b", "$7", "$6"}
 
 
@@ -2233,8 +2221,6 @@ def test_get_key_dependency_2():
         con.key
         for con in ctx.dependency_map.get_dependent_input_conns("dummy_final_output")
     }
-    # assert resulting_connections == {"Mean_4_axis", "b", "input", "Mean_4_keepdim",
-    # "target", "w"}
     assert resulting_connections == {"target", "input", "w", "b", "$7", "$6"}
     assert dummy_connection1 == dummy_connection2 == {"dummy_input"}
 
@@ -2293,7 +2279,6 @@ def test_regularization_2():
     result = compiled_model.evaluate(
         params={"w": backend.array([[[1.0], [2.0]], [[3.0], [4.0]], [[5.0], [6.0]]])}
     )
-    # ref_loss = backend.array(0.7583333333333333 * 6)
     ref_loss = backend.array(4.55)
     tolerance = 1e-15
     assert result["final_cost"] - ref_loss < tolerance
@@ -2354,7 +2339,6 @@ def test_regularization_4():
     result = compiled_model.evaluate(params={"w": backend.ones(2, 2, 4, 8, 6, 7)})
     ref_loss = backend.array(67.2)
     tolerance = 1e-15
-    # print((result["w"]**2).sum() * .5 * .1 / (np.power(2 * 8, 1/2)))
     assert result["final_cost"] - ref_loss < tolerance
 
 
@@ -2394,7 +2378,6 @@ def test_regularization_5():
     result = compiled_model.evaluate(params={"w": backend.ones(2, 2, 4, 8, 6, 7)})
     ref_loss = backend.array(30.688300634630973)
     tolerance = 1e-14
-    # print((result["w"]**2).sum() * .5 * .1 / (np.power(2 * 7 * 8 * 6, 1/3)))
     assert result["final_cost"] - ref_loss < tolerance
 
 
@@ -3270,7 +3253,6 @@ def test_replace_with_primitive_1():
     dag = comp_model.dag  # type: ignore
     assert ScaledDotProduct not in [item.__class__ for item in dag]
     assert expected_key_mapping == list(dag.values())[0]
-    # assert {} == comp_model.non_differentiables
 
 
 @pytest.mark.skip("ScaledDotProduct will be logical")
@@ -3290,7 +3272,6 @@ def test_replace_with_primitive_2():
 
     assert ScaledDotProduct not in [item.__class__ for item in dag]
     assert expected_key_mapping == list(dag.values())[0]
-    # assert {} == comp_model.non_differentiables
     assert set() == comp_model.data_store.all_static_keys
     assert set(["query", "key", "mask", "value"]) == set(comp_model._input_keys)
     assert set(["output"]) == set(comp_model.output_keys)
@@ -3322,8 +3303,6 @@ def test_replace_with_primitive_3():
 
     assert ScaledDotProduct not in [item.__class__ for item in dag]
     assert expected_key_mapping == list(dag.values())[0]
-    # assert {} == comp_model.non_differentiables
-    # assert {"q", "k", "v", "m", "output"} == comp_model.data_store.all_static_keys
     assert {"output"} == comp_model.data_store.all_static_keys
     assert {"q", "k", "v", "m"} == comp_model.data_store.unused_keys
     assert set(["q", "k", "m", "v"]) == set(comp_model._input_keys)
@@ -4614,12 +4593,6 @@ def test_cycle_handling_2():
         "_Gelu_2_output": ["gelu", {"_Model_1_output1"}],
         "_Model_0__output2": ["sin", {"_Gelu_2_output"}],
     }
-
-    # '_Model_0_output2' = ['sin', {'_Gelu_2_output'}]
-    # '_Gelu_2_output' = ['gelu', {'_Model_1_output1'}]
-    # 'output' = ['tanh', {'_Model_1_output2'}]
-    # '_Model_1_output2' = ['sigmoid', {'_Model_0_output2'}]
-    # '_Model_1_output1' = ['relu', {'input'}]
 
     inputs = {
         "input": backend.array(

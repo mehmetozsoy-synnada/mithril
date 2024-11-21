@@ -668,15 +668,11 @@ class ArtificialPrimitive(PrimitiveModel):
         updates = Updates()
         # Reverse inference
         if not isinstance(output._type, UnionType):
-            # update_type(input, output._type, updates)
             input.set_type(output._type)
-            # updates.add(input, UpdateType._TYPE)
             status = True
         # Forward inference
         elif not isinstance(input, UnionType):
-            # update_type(output, input._type, updates)
             output.set_type(input._type)
-            # updates.add(output, UpdateType._TYPE)
             status = True
         return status, updates
 
@@ -1033,14 +1029,12 @@ def test_connect_7():
     }
     output_gradients = {
         "output2": backend.array([1.0]),
-        # "abcd": backend.array([2.0]),
         "output": backend.array([1.0]),
     }
 
     ref_outputs = {
         "output": backend.array([6.0]),
         "output2": backend.array([9.0]),
-        # "abcd": backend.array([6.0])
     }
     ref_gradients = {
         "left": backend.array([1.0]),
@@ -1124,11 +1118,9 @@ def test_connect_8():
     output_gradients = {
         "output1": backend.array(1.0),
         "output": backend.array(1.0),
-        # "abcd": backend.array(1.0)
     }
 
     ref_outputs = {
-        # "abcd": backend.array(2.0),
         "output": backend.array(2.0),
         "output1": backend.array(4.0),
     }

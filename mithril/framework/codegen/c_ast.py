@@ -43,7 +43,6 @@ class Call(Expr):
         args_str = ", ".join(
             [arg.to_str() if isinstance(arg, Expr) else arg for arg in self.args]
         )
-        # args_str = ", ".join(self.args)
         return f"{self.name}({args_str})"
 
 

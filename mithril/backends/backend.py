@@ -52,10 +52,6 @@ class Backend(ABC, Generic[DataType]):
             )
         self.seed = 10  # Can be set any integer.
 
-        # Initialize epsilon constants according to given precision.
-        # for key, value in core.epsilon_table[f"float{self.precision}"].items():
-        #     setattr(self, key, value)
-
     @property
     def precision(self):
         return self._precision
@@ -101,7 +97,6 @@ class Backend(ABC, Generic[DataType]):
 
     def empty_cache(self):  # noqa: B027
         pass
-        # print("Warning: empty_cache is not supported!")
 
     def cast(self, value: Any) -> Any:
         # Simply casts given value to the backend's precision.

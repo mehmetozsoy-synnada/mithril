@@ -46,7 +46,6 @@ def convert_to_array(backend: Backend, weights: dict | list):
             else weights
         )
     return {k: convert_to_array(backend, weights[k]) for k in sorted(weights)}
-    # return {k: convert_to_array(backend, weights[k]) for k in weights}
 
 
 def dict_to_output_specs(specs_dict: dict[str, dict]) -> dict[str, dict]:
@@ -474,7 +473,6 @@ def check_single_item(
     elif isinstance(item_1, int | set):
         # If items are integers, they must be equal.
         assert item_1 == item_2, f"Integers '{item_1}' and '{item_2}' do not match."
-    # elif item_1 is None or (str_1 := item_1[0]) == (str_2 := item_2[0]):
 
     else:
         assert isinstance(item_1, str)

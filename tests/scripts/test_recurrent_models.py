@@ -225,30 +225,6 @@ class MySimpleRNNCellWithLinear(Cell):
             left=mult_model_3.output, right="bias_o", output=IOKey("output")
         )
 
-        # TODO: Commented code below does not work while above code does.
-        # There may be a bug. Investigate in detail
-        # self += Shape()(input = "input", output = "shp_output")
-        # self += ScalarItem(index = 0)(input = "shp_output", output = "scalar_out")
-        # self += TensorSlice(start = ...)(input = "prev_hidden", start = "scalar_out",
-        #           output = IOKey("hidden_compl"))
-        # self += TensorSlice(stop = ...)(input = "prev_hidden", stop = "scalar_out",
-        #               output = "slice_out")
-        # self += MatrixMultiply()(left = "input", right = "w_ih",
-        #           output = "matmul1_out")
-        # self += MatrixMultiply()(left = "slice_out", right = "w_hh",
-        #           output = "matmul2_out")
-        # self += Add()(left = "matmul2_out", right = "matmul1_out",
-        #           output = "add1_out")
-        # self += Add()(left = "add1_out", right = "bias_hh",
-        #           output = "add2_out")
-        # self += Add()(left = "add2_out", right = "bias_ih",
-        #           output = "add3_out")
-        # self += Tanh()(input = "add3_out", output = IOKey("hidden"))
-        # self += MatrixMultiply()(left = "hidden", right = "w_ho",
-        #           output = "matmul3_out")
-        # self += Add()(left = "matmul3_out", right = "bias_o",
-        #           output = IOKey("output"))
-
         ...
         shapes: dict[str, list[str | int]] = {
             "input": ["N", 1, "d_in"],

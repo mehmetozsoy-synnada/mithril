@@ -214,7 +214,6 @@ class TrainModel(Model):
         for key in kwargs:
             if key in loss_model.conns.output_keys:
                 raise KeyError("Output of the loss model cannot be defined!")
-        # self._extend(loss_model, **kwargs)
         self.extend(loss_model, **kwargs)
         prev_out_key = self.get_single_output(loss_model).data
         if (prev_con := self.conns.get_con_by_metadata(prev_out_key.metadata)) is None:
@@ -224,7 +223,6 @@ class TrainModel(Model):
             in_key = m._canonical_input.key
             if i == len(reduce_steps) - 1 and key_name is not None and coef is None:
                 out_key = self.get_single_output(m).key
-                # self.extend(m, **{in_key: prev_out_key.conn, out_key: key_name})
                 info: dict[str, ConnectionType] = {
                     in_key: prev_out_key.conn,
                     out_key: IOKey(key_name),
@@ -241,7 +239,6 @@ class TrainModel(Model):
 
         # Apply coef
         if coef is not None:
-            # kwargs = {"left": prev_out_key.conn, "right": coef, "output": key_name}
             kwargs = {
                 "left": prev_out_key.conn,
                 "right": coef,
@@ -361,7 +358,6 @@ class TrainModel(Model):
 
             if key_name is not None:
                 out = self.get_single_output(model).data
-                # kwargs[out.key] = key_name
                 kwargs[out.key] = IOKey(name=key_name)
 
             self.extend(
@@ -390,7 +386,6 @@ class TrainModel(Model):
     ) -> None:
         # TODO: Somehow we need to imply metric is attached and self model
         # could not be extended or be used as another model's child model.
-        # self._extend(model, **kwargs)
         self.extend(model, **kwargs)
 
         if not reduce_steps:
@@ -401,7 +396,6 @@ class TrainModel(Model):
             in_key = m._canonical_input.key
             if i == len(reduce_steps) - 1 and key_name is not None:
                 out = self.get_single_output(m).data
-                # self.extend(m, **{in_key: prev_out_key, out.key: key_name})
                 info: dict[str, ConnectionType] = {
                     in_key: prev_out_key,
                     out.key: IOKey(name=key_name),
@@ -667,7 +661,6 @@ class TrainModel(Model):
             for reg_key in dependencies & self.geomean_map.keys():
                 for reg_info in self.geomean_map[reg_key]:
                     geo_mappings.setdefault(reg_info, [])
-                    # if reduce_inputs := self.reduce_inputs[key]:
                     geo_mappings[reg_info].append(self.reduce_inputs[key])
 
         for reg_info, loss_connections in geo_mappings.items():

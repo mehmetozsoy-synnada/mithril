@@ -41,7 +41,7 @@ from mithril.models import (
 def dummy_constraint(output: Tensor | Scalar, input: Tensor | Scalar):
     # Dummy test constraint that is written for test purposes
     # it basically increment shapes by 1
-    # updated_symbols = set()
+    # updated_symbols = set() #!!
     updates = Updates()
     status = False
     output_repr = output._temp_shape if isinstance(output, Tensor) else output.value
@@ -185,12 +185,6 @@ def make_reference_dict(
     we control changes in all extend or set_shape calls.
     """
     return ref_dict
-
-
-# def assert_constr_counts(model_dict):
-#     for m, ref_counts in model_dict.items():
-#         for ref_count, constr in zip(ref_counts, m.constraints):
-#             assert constr.counter == ref_count
 
 
 def test_shape_constraint_counter_1():

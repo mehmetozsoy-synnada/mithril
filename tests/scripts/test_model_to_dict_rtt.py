@@ -407,6 +407,34 @@ def test_composite_8():
     )
 
 
+def test_add_efi():
+    model = Model()
+    add1 = Add()
+    add2 = Add()
+    model += add1()
+    model += add2(left=add1.output, output=IOKey("output"))
+
+    model_dict_created = dict_conversions.model_to_dict(model)
+    model_recreated = dict_conversions.dict_to_model(model_dict_created)
+    model_dict_recreated = dict_conversions.model_to_dict(model_recreated)
+    assert model_dict_created == model_dict_recreated
+    assert_models_equal(model, model_recreated)
+
+
+def test_add_efo():
+    model = Model()
+    add1 = Add()
+    add2 = Add()
+    model += add1(output=IOKey("output"))
+    model += add2(left="", output=add1.left)
+
+    model_dict_created = dict_conversions.model_to_dict(model)
+    model_recreated = dict_conversions.dict_to_model(model_dict_created)
+    model_dict_recreated = dict_conversions.model_to_dict(model_recreated)
+    assert model_dict_created == model_dict_recreated
+    assert_models_equal(model, model_recreated)
+
+
 def test_composite_9():
     model = Model()
     model += (l1 := Linear(dimension=10))(w="w", output=IOKey(name="output"))

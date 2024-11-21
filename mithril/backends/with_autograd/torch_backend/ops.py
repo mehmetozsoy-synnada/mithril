@@ -961,20 +961,6 @@ def lstm_cell(
     hidden_out, cell_out = torch._C._VariableFunctions.lstm_cell(
         input, (hidden, cell), weight_ih_l0, weight_hh_l0, bias_ih_l0
     )
-
-    # input = input.squeeze(dim = 1)
-    # cell = prev_cell.squeeze(dim = 1)
-    # hidden = prev_hidden.squeeze(dim = 1)
-    # hidden_shape = hidden.shape[-1]
-    # input_hidden = torch.concat((input, hidden), dim = 1)
-    # all_weights = torch.concat((w_i, w_f, w_c, w_o), dim = 1)
-    # a_t = input_hidden @ all_weights
-    # i_t = torch.sigmoid(a_t[:, 0: hidden_shape])
-    # f_t = torch.sigmoid(a_t[:, hidden_shape: 2 * hidden_shape])
-    # o_t = torch.sigmoid(a_t[:, 2 * hidden_shape: 3 * hidden_shape])
-    # g_t = torch.tanh(a_t[:, 3 * hidden_shape: 4 * hidden_shape])
-    # cell_out = f_t * cell + i_t * g_t
-    # hidden_out = o_t * torch.tanh(cell_out)
     output = torch.concat((cell_out[:, None, :], hidden_out[:, None, :]), dim=0)
     return output
 

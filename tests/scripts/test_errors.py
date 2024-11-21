@@ -142,18 +142,3 @@ def test_multi_write_error_1():
         str(err_info.value)
         == "Given connections are both output connections. Multi-write error!"
     )
-
-
-# def test_extend_underscore_error_1():
-#     model = Model()
-#     sum1 = Add()
-#     with pytest.raises(KeyError) as err_info:
-#         model += sum1(left = "_input", right = "_a1", output = "output")
-#     assert str(err_info.value) == '"Given key name (_input) cannot start with \'_\'"'
-
-# def test_extend_underscore_error_2():
-#     model = Model()
-#     sum1 = Add()
-#     with pytest.raises(KeyError) as err_info:
-#         model += sum1(left = "__", output = "__output")
-#     assert str(err_info.value) == '"Given key name (__) cannot start with \'_\'"'

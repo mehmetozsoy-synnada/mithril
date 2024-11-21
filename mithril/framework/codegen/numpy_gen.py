@@ -136,9 +136,7 @@ class NumpyCodeGen(PythonCodeGen):
                         out_data = params[_key]
                     else:
                         out_data = _key_cache["output"]
-                # dtype = getattr(self.backend, f"float{self.backend.precision}")
                 assert isinstance(out_data, np.ndarray)
-                # dtype = getattr(Dtype, f"float{self.backend.precision}")
                 dtype = Dtype[f"float{self.backend.precision}"]
                 gradients[key] = self.backend.zeros_like(out_data, dtype=dtype)
 

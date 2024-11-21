@@ -66,7 +66,6 @@ class ExtendInfo:
 
 
 class BaseModel(abc.ABC):
-    # _input_keys: tuple[str, ...] = None
     # Disposable models only used once for entire training session.
     # This attribute is only use for manual backends' code generation.
 
@@ -798,7 +797,6 @@ class DependencyMap:
             conn_data = key_stack.pop()
             if conn_data.key in self.conns.output_keys:
                 specs.add(conn_data)
-            # key_stack.update(self.dependency_map.get(key.key, OrderedSet()))
             # TODO: add test checking the while
             key_stack |= (
                 OrderedSet(

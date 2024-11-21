@@ -55,7 +55,6 @@ def topological_sort_dfs(graph: dict[Any, set | KeysView]) -> list:
     """
     # Insert "m_start" node as the start node for dfs.
     graph["m_start"] = graph.keys()
-    # graph["m_start"] = set(graph.keys())
     seen = set()
     stack: list[str] = []  # path variable is gone, stack and order are new
     order = []  # order will be in reverse order at first
@@ -355,9 +354,7 @@ def pack_data_into_time_slots(
             for arr in data
         ]
     stacked_data = backend.stack(padded)
-    # stacked_data = backend.concatenate(padded)
     time_slots = find_slot_lengths(stacked_data, lengths)
-    # print("Second method takes: ", time.time() - start)
     return (
         (time_slots, data_sorted)
         if not return_indices
@@ -508,7 +505,6 @@ def binary_search(
         and ((val := eval_fn(guess := midpoint(lower, upper))) != target)
     ):
         it += 1
-        # if backend.isnan(val):
         if val > target:
             upper = guess
         elif val < target:

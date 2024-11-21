@@ -328,9 +328,7 @@ class Model(BaseModel):
 
         if isinstance(
             given_connection, MainValueType | NullConnection
-        ):  # or given_connection == NOT_GIVEN:
-            # Immediate values can be provided only for inputs.
-            # if given_connection != NOT_GIVEN:
+        ):  # Immediate values can be provided only for inputs.
             if isinstance(given_connection, MainValueType):
                 set_value = given_connection
 
@@ -613,10 +611,6 @@ class Model(BaseModel):
         elif isinstance(connection, ConnectionData):
             connection_type = connection.metadata.data.__class__
 
-        # elif (
-        #     isinstance(connection, str)
-        #     and (data := self.conns.get_data(connection)) is not None
-        # ):
         elif (
             isinstance(connection, str)
             and (_conn := self.conns.get_connection(connection)) is not None
@@ -1231,25 +1225,6 @@ class Model(BaseModel):
         # Update jittablity by using model's jittablity.
         self._jittable &= model.jittable
 
-    # def __add__(self, model: Model | PrimitiveModel):
-    #     """This function allows models to be added sequentially via "+=" operator.
-    #     There are several conditions for a model to be sequentially added:
-    #     if added model has single input, connect that input directly.
-
-    #     Parameters
-    #     ----------
-    #     model : Model
-    #         Other model to be sequentially added.
-    #     """
-    #     if not (isinstance(model, BaseModel) or isinstance(model, PrimitiveModel)):
-    #         raise TypeError("Added element should be a Model type.")
-    #     kwargs = {}
-    #     if self.canonical_output:
-    #         kwargs = {model._canonical_input.key: self.canonical_output}
-
-    #     self.extend(model, **kwargs)
-    #     return self
-
     def __add__(self, info: ExtendInfo | PrimitiveModel | Model) -> Self:
         """This function allows models to be added via "+=" operator.
         There are several conditions for a model to be added:
@@ -1459,13 +1434,9 @@ class Model(BaseModel):
             self.canonical_output is not NOT_AVAILABLE
             and self.canonical_output.key not in self.conns.output_keys
         ):
-            # self.output_keys += (self.canonical_output.key,)
             assert isinstance(self._canonical_output, ConnectionData)
             self.conns._set_connection_type(self._canonical_output, KeyType.OUTPUT)
-            # setattr(self, self._canonical_output.key, self.canonical_output)
-
         self.dependency_map.update_all_keys()
-
         # Sort and freeze dag
         self.dag = {m: self.dag[m] for m in self.get_models_in_topological_order()}
         if self.formula_key is not None:

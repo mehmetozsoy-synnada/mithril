@@ -517,7 +517,6 @@ class PhysicalModel(GenericDataType[DataType]):
             if key in non_randomized_keys:
                 continue
 
-            # seed_key = self.backend.set_seed_key(seed, seed_key)
             shape = self.shapes[key]
             shape_len = len(shape)
             if None in shape:
@@ -722,9 +721,6 @@ class PhysicalModel(GenericDataType[DataType]):
                 jacobian_par_fn = jacobian_method(partial(jacobian_wrapper, output=out))
 
                 for key in inputs:
-                    # if all(isinstance(dim, int) for dim in self.shapes[out]) and all(
-                    #     isinstance(dim, int) for dim in self.shapes[key]
-                    # ):
                     key_shp = self.shapes[key]
                     out_shp = self.shapes[out]
                     if (
@@ -746,9 +742,6 @@ class PhysicalModel(GenericDataType[DataType]):
                     # Provide input in dict format in order to get jacobians in dict
                     # format since all inputs are originally provided in dict format.
                     input = {key: inputs[key]}
-                    # jacobians[out] |= jacobian_method(
-                    #     partial(jacobian_wrapper, output=out)
-                    # )(input)
                     jacobians[out] |= jacobian_par_fn(input)
             return jacobians
 
@@ -917,13 +910,6 @@ class PhysicalModel(GenericDataType[DataType]):
             # Find all keys of the logical model, Then find the projection of those keys
             # in their corresponding physical model
             projected_keys = set()
-            # for conn in model.conns.all.values():
-            #     if (
-            #         pm_keys := data_to_key_map.get(
-            #             self.data_store.data_memo.get(id(conn.metadata.data))
-            #         )
-            #     ) is not None:
-            #         projected_keys.update(pm_keys)
             for conn in model.conns.all.values():
                 if (
                     data := self.data_store.data_memo.get(id(conn.metadata.data))
@@ -1147,8 +1133,6 @@ class PhysicalModel(GenericDataType[DataType]):
         external_keys = list(model.external_keys)
 
         for key, val in unnecessary_keys.items():
-            # self.static_keys.pop(val)
-            # self.non_differentiables.pop(val)
             self.data_store._remove_key_from_store(val, label_as_unused=False)
             self.data.pop(val)
             self._input_keys.discard(val)
@@ -1165,7 +1149,6 @@ class PhysicalModel(GenericDataType[DataType]):
         primitive.parent = model.parent
 
         p_key_mappings = {}
-        # for key in model._input_keys | model.output_keys:
         for key in model.external_keys:
             if key[0] != "$":
                 p_key_mappings[key] = key_mappings.get(key, key)

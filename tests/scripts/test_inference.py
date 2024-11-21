@@ -24,10 +24,6 @@ from tests.scripts.helper import evaluate_case
 from tests.scripts.test_utils import finalize_model
 
 # Read Data
-# shape_inference_tests_path = "tests/json_files/shape_directed_test.json"
-# with open(shape_inference_tests_path) as f:
-#     shape_inference_tests = json.load(f)
-
 discard_keys_inference_tests = "tests/json_files/discard_keys_directed_test.json"
 with open(discard_keys_inference_tests) as f:
     discard_keys_inference_tests_dict: dict = json.load(f)

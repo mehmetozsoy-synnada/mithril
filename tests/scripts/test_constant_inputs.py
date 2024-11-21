@@ -243,7 +243,6 @@ def test_default_in_numpy_error():
             backend=NumpyBackend(),
             constant_keys=constant_keys,
             data_keys=data_keys,
-            # file_path = "constant_inputs"
         )
     assert (
         str(err_info.value)
@@ -325,7 +324,6 @@ def test_default_given_compile_numpy():
         model=model,
         backend=NumpyBackend(),
         constant_keys=static_inputs,
-        # file_path = "constant_inputs.py"
     )
     inputs = compiled_model.randomize_params()
     data = {"axis": None}
@@ -413,7 +411,6 @@ def test_constant_given_data_numpy():
         model=model,
         backend=NumpyBackend(),
         constant_keys=static_inputs,
-        # file_path = "constant_inputs.py"
     )
 
     inputs = compiled_model.randomize_params()
@@ -515,8 +512,6 @@ def test_axis_1():
     rob_pow = Power(robust=True, threshold=2.3)
     model += rob_pow(base="base", exponent="exponent")
     model += relu(input=rob_pow.output, slope=rob_pow.threshold)
-    # Check required value transfer occured in logical model
-    # assert relu.conns.get_data("slope").value == 2.3
 
     backend = NumpyBackend()
     compiled_model = mithril.compile(
@@ -585,7 +580,6 @@ def test_mean_1_set_values_1():
         input=IOKey(value=[[2.0, 3.0], [1.0, 7.0]], name="input"),
         output=IOKey(name="output"),
     )
-    # model.make_static("input", [[2.0, 3.0], [1.0, 7.0]])
     with pytest.raises(ValueError) as err_info:
         model += mean_model(input=buff1.output, output=IOKey(name="output1"))
     assert str(err_info.value) == "Requires minimum of 4 dimensionality, got 2."
@@ -661,10 +655,6 @@ def test_scalar_mean_2_set_values():
         str(err_info_1.value)
         == "Value is set before as None. A scalar value can not be reset."
     )
-
-    # TODO: Complete this test after CONSTANT handling is implemented.
-    # with pytest.raises(ValueError) as err_info_2:
-    #     mean_model.extend(rob_pow, threshold = 1.5, base = "input")
 
 
 def test_reduce_axis_error():
@@ -1979,7 +1969,7 @@ def test_static_shape_model_2():
     cache = comp_model.data_store.data_values
     expected_cache = {"output": np.array([8, 8], dtype=np.int32)}
     # Check cached_data.
-    # assert cache is not None and cache.keys() == expected_cache.keys()
+    assert cache is not None and cache.keys() == expected_cache.keys()
     assert isinstance(cache, dict)
     assert all([np.all(value == expected_cache[key]) for key, value in cache.items()])
     # Check runtime data keys.

@@ -96,9 +96,6 @@ VariadicTemplateType = tuple[str, EllipsisType]
 
 AssignmentType = (
     Mapping[str, set[int]]
-    # | dict[tuple[str, EllipsisType], list[tuple[int | str, ...]]]
-    # | dict[tuple[str, EllipsisType], list[tuple[int, ...]]]
-    # | dict[tuple[str, EllipsisType], list[tuple[str, ...]]]
     | Mapping[VariadicTemplateType, VariadicPossiblesType]
     | Mapping[VariadicTemplateType, set[int]]
     | Mapping[str, VariadicPossiblesType]
@@ -282,7 +279,6 @@ def make_assertions(
 
 
 def assert_constraint_results(
-    # shapes: dict[str, list[str | int | None | tuple[str, EllipsisType]]],
     shapes: Mapping[str, ShapeTemplateType],
     assignments: AssignmentType,
     ref_results: dict,
@@ -416,7 +412,6 @@ def test_bcast_error_1():
     }
     with pytest.raises(ValueError) as err_info:
         assert_constraint_results(shapes, {}, {}, {}, bcast, True, set())
-    # assert str(err_info.value) == 'Shape mismatch in Broadcast!'
     assert (
         str(err_info.value)
         == "Inputs shape mismatch at dimension 0. Shapes are inconsistent."
@@ -438,7 +433,6 @@ def test_bcast_error_2():
         str(err_info.value)
         == "Determined shape representations should have same length."
     )
-    # assert str(err_info.value) == "Shape mismatch for output!"
 
 
 def test_bcast_error_3():
@@ -456,7 +450,6 @@ def test_bcast_error_3():
         str(err_info.value)
         == "Determined shape representations should have same length."
     )
-    # assert str(err_info.value) == "Shape mismatch for output!"
 
 
 def test_bcast_error_4():
@@ -4078,166 +4071,6 @@ def test_reverse_4():
         shapes, {}, final_shapes, {}, reverse_constraints, True, {"input"}, scalar_info
     )
 
-
-############# ADDITION #############
-
-# def test_addition_1():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", "u2", "u3", "u4"],
-#         "input1": ["u1", "u2", "u3", 6],
-#         "input2": ["u1", "u2", "u3", 4],
-
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (-1, -1, -1)
-#     in1_map = shape_map["input1"]
-#     in2_map = shape_map["input2"]
-#     out_map = shape_map["output"]
-#     out_pre = out_map.prefix
-
-#     status, updated_symbols = addition_constraints(**data)
-#     # assert {out_pre[-1]} == updated_symbols
-#     check_updated_symbols({out_pre[-1]}, updated_symbols)
-#     assert status == True
-#     assert in1_map.get_shapes({}, {}) == ["u1", "u2", "u3", 6]
-#     assert in2_map.get_shapes({}, {}) == ["u1", "u2", "u3", 4]
-#     assert out_map.get_shapes({}, {}) == ["u1", "u2", "u3", 10]
-
-
-#     return status, data, addition_constraints
-
-
-# def test_addition_2():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", "u2", "u3", "u4"],
-#         "input1": ["u1", "u2", 6],
-#         "input2": ["u1", "u2", 4],
-
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (1, -1, -1)
-#     in1_map = shape_map["input1"]
-#     in2_map = shape_map["input2"]
-#     out_map = shape_map["output"]
-#     out_pre = out_map.prefix
-
-#     status, updated_symbols = addition_constraints(**data)
-#     # assert updated_symbols == {out_pre[1]}
-#     check_updated_symbols({out_pre[1]}, updated_symbols)
-#     assert status == True
-#     assert in1_map.get_shapes({}, {}) == ["u1", 10, 6]
-#     assert in2_map.get_shapes({}, {}) == ["u1", 10, 4]
-#     assert out_map.get_shapes({}, {}) == ["u1", 10, "u2", "u3"]
-
-#     return status, data, addition_constraints
-
-
-# def test_addition_3():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", "u1", "u1", "u1", "u1", "u1"],
-#         "input1": [6],
-#         "input2": ["u1", 4, "u1"],
-
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (1, -1, 1)
-#     in1_map = shape_map["input1"]
-#     in2_map = shape_map["input2"]
-#     in2_pre = in2_map.prefix
-#     out_map = shape_map["output"]
-#     out_pre = out_map.prefix
-
-#     status, updated_symbols = addition_constraints(**data)
-#     # assert {*out_pre, in2_pre[0], in2_pre[-1]} == updated_symbols
-#     check_updated_symbols({*out_pre, in2_pre[0], in2_pre[-1]}, updated_symbols)
-#     assert status == True
-#     assert in1_map.get_shapes({}, {}) == [6]
-#     assert in2_map.get_shapes({}, {}) == [10, 4, 10]
-#     assert out_map.get_shapes({}, {}) == [10, 10, 10, 10, 10, 10]
-
-#     return status, data, addition_constraints
-
-
-# def test_addition_4():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", "u2", ("Var1", ...), "u3", "u4"],
-#         "input1": ["u1", ("Var2", ...), 6],
-#         "input2": [4, ("Var3", ...)],
-
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (1, -1, 0)
-#     in1_map = shape_map["input1"]
-#     in1_root = in1_map.root
-#     in2_map = shape_map["input2"]
-#     in2_root = in2_map.root
-#     out_map = shape_map["output"]
-#     out_root = out_map.root
-#     out_pre = out_map.prefix
-
-#     status, updated_symbols = addition_constraints(**data)
-#     # assert {out_pre[1]} == updated_symbols
-#     check_updated_symbols({out_pre[1]}, updated_symbols)
-#     assert status == True
-#     assert in1_map.get_shapes({}, {}) == ["u1", "(V1, ...)", 6]
-#     assert in2_map.get_shapes({}, {}) == [4, "(V1, ...)"]
-#     assert out_map.get_shapes({}, {}) == ["u1", 10, ("(V1, ...)"), "u2", "u3"]
-
-#     return status, data, addition_constraints
-
-
-# def test_addition_5():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", 10, ("Var1", ...), "u3", "u4"],
-#         "input1": ["u1", ("Var2", ...), 6],
-#         "input2": [4, ("Var3", ...)]
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (1, -1, 0)
-#     in1_map = shape_map["input1"]
-#     in2_map = shape_map["input2"]
-#     out_map = shape_map["output"]
-
-#     status, updated_symbols = addition_constraints(**data)
-#     assert set() == updated_symbols.shape_updates
-#     assert status == True
-#     assert in1_map.get_shapes({}, {}) == ["u1", "(V1, ...)", 6]
-#     assert in2_map.get_shapes({}, {}) == [4, "(V1, ...)"]
-#     assert out_map.get_shapes({}, {}) == ["u1", 10, ("(V1, ...)"), "u2", "u3"]
-
-#     return status, data, addition_constraints
-
-# def test_addition_6_error():
-#     """Should work with no problem
-#     """
-#     shapes: dict[str, list[int | str | tuple]] = {
-#         "output": ["u1", 13, ("Var1", ...), "u3", "u4"],
-#         "input1": ["u1", ("Var2", ...), 6],
-#         "input2": [4, ("Var3", ...)],
-
-#     }
-#     shape_map = create_shape_map(shapes)
-#     data = shape_map_to_tensor(shape_map)
-#     data["indices"] = (1, -1, 0)
-
-#     with pytest.raises(ValueError) as err_info:
-#         addition_constraints(**data)
-#     assert str(err_info.value) == "Dimensions does not match in Tensor slice model!"
 
 ############# CONCAT #############
 

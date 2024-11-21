@@ -25,13 +25,6 @@ from tests.scripts.test_utils import (
     get_all_data,
 )
 
-# def convert_to_array(backend, weights: Union[Dict, List]):
-#     # Converts all list elements to numpy array in a dictionary.
-#     if not isinstance(weights, dict):
-#         return backend.array(weights) if isinstance(weights, (list, int)) else weights
-#     return {k: convert_to_array(backend, weights[k]) for k in sorted(weights)}
-#     # return {k: convert_to_array(backend, weights[k]) for k in weights}
-
 
 def evaluate_case(
     backend: Backend,
@@ -97,9 +90,7 @@ def evaluate_case(
             output_gradients = convert_to_array(
                 backend, current_case.get("output_grads", {})
             )
-            # for key in ignore_grad_keys:
-            #     if key in model.output_keys:
-            #         del output_gradients[key]
+
             model_grad = compiled_model.evaluate_gradients(
                 inputs, data={}, output_gradients=output_gradients
             )
@@ -123,13 +114,11 @@ def evaluate_case(
                 for key, value in compiled_model.get_shapes(symbolic=False).items()
             }
             numeric_shape_dict.pop("final_cost")
-            # if model_shape_dict.get("loss") is not None:
-            #     numeric_shape_dict["loss"] = final_loss_shape
             for key, value in numeric_shape_dict.items():
                 assert value == model_shape_dict[key]
 
         # Assert values
-        # assert set(outputs.keys()) == set(reference_outputs)
+        assert set(outputs.keys()) == set(reference_outputs)
         for k, v in reference_outputs.items():
             if isinstance(v, dict):
                 v = v[backend.type]

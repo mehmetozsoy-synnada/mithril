@@ -173,32 +173,32 @@ def test_shape_reshape():
     compare_models(model_1, model_2, backend, data)
 
 
-# def test_mean():
-#     """Tests if mean functionality works."""
-#     # Create with shortcut.
-#     model_1 = Model()
-#     model_1 += (lin_1 := Linear(dimension=1))(input="input_1", w="w_1", b="b_1")
-#     mean = lin_1.output.mean(axis=0)
-#     model_1 += (lin_2 := Linear(dimension=2))(input="input_2", w="w_2", b="b_2")
-#     model_1 += Add()(left=lin_2.output, right=mean, output=IOKey(name="output"))
+def test_mean_1():
+    """Tests if mean functionality works."""
+    # Create with shortcut.
+    model_1 = Model()
+    model_1 += (lin_1 := Linear(dimension=1))(input="input_1", w="w_1", b="b_1")
+    mean = lin_1.output.mean(axis=0)
+    model_1 += (lin_2 := Linear(dimension=2))(input="input_2", w="w_2", b="b_2")
+    model_1 += Add()(left=lin_2.output, right=mean, output=IOKey(name="output"))
 
-#     # Create with extend.
-#     model_2 = Model()
-#     model_2 += (lin_3 := Linear(dimension=1))(input="input_1", w="w_1", b="b_1")
-#     model_2 += (lin_4 := Linear(dimension=2))(input="input_2", w="w_2", b="b_2")
-#     model_2 += (mean_model := Mean(axis=...))(input=lin_3.output, axis=0)
-#     model_2 += Add()(
-#         left=lin_4.output, right=mean_model.output, output=IOKey(name="output")
-#     )
+    # Create with extend.
+    model_2 = Model()
+    model_2 += (lin_3 := Linear(dimension=1))(input="input_1", w="w_1", b="b_1")
+    model_2 += (lin_4 := Linear(dimension=2))(input="input_2", w="w_2", b="b_2")
+    model_2 += (mean_model := Mean(axis=TBD))(input=lin_3.output, axis=0)
+    model_2 += Add()(
+        left=lin_4.output, right=mean_model.output, output=IOKey(name="output")
+    )
 
-#     # Provide backend and data.
-#     backend = JaxBackend(precision=32)
-#     data = {
-#         "input_1": backend.array([[1.0], [2]]),
-#         "input_2": backend.array([[2.0, 3]]),
-#     }
-#     # Check equality.
-#     compare_models(model_1, model_2, backend, data)
+    # Provide backend and data.
+    backend = JaxBackend(precision=32)
+    data = {
+        "input_1": backend.array([[1.0], [2]]),
+        "input_2": backend.array([[2.0, 3]]),
+    }
+    # Check equality.
+    compare_models(model_1, model_2, backend, data, check_internals=False)
 
 
 def test_slice_item():

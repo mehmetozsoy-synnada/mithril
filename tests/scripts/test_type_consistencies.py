@@ -333,7 +333,6 @@ def test_type_13():
         b="b",
         output=IOKey(name="output"),
     )
-    # model.make_static("input", [[False, True], [False, False]])
     assert lin_model.input.data.metadata.data._type is bool
 
 

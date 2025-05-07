@@ -409,12 +409,7 @@ class BaseModel:
     # TODO: factory_args should be instance variable not class!
     factory_args: dict[str, Any] = {}
 
-    def __init__(
-        self,
-        name: str | None = None,
-        formula_key: str | None = None,
-        enforce_jit: bool = True,
-    ) -> None:
+    def __init__(self, name: str | None = None, formula_key: str | None = None) -> None:
         self.dag: dict[BaseModel, dict[str, ConnectionData]] = {}
         self._formula_key: str | None = formula_key
         # TODO: maybe set it only to Operator / Model.
@@ -432,7 +427,6 @@ class BaseModel:
         self.frozen_attributes: list[str] = []
         self.dependency_map = DependencyMap(self.conns)
         self.name = name
-        self._enforce_jit = enforce_jit
         self._jittable = True
         self._constraint_solver: ConstraintSolver | None = ConstraintSolver()
         self.safe_shapes: dict[str, ShapeTemplateType] = {}
@@ -636,19 +630,13 @@ class BaseModel:
                 # If a Connection without any model but with a name
                 # that exists in the model provided, match its metadata
                 # with the one existing in the model.
-                given_key = given_connection.get_key()
-                if (
-                    given_key is not None
-                    and (existing_conn := self.conns.get_connection(given_key))
-                    and given_connection.metadata not in self.conns.metadata_dict
-                ):
-                    # TODO: Last if condition should be removed After solving
-                    # provisional model issue, which sets model of connection to None.
+                _key = given_connection.get_key()
+                if _key is not None and (existing_c := self.conns.get_connection(_key)):
                     updates |= self._match_hyper_edges(
-                        existing_conn.metadata, given_connection.metadata
+                        existing_c.metadata, given_connection.metadata
                     )
                     # Replace Connection metadata with the matched one.
-                    given_connection.metadata = existing_conn.metadata
+                    given_connection.metadata = existing_c.metadata
             case _ if isinstance(given_connection, MainValueInstance | Tensor):
                 if local_connection in model.dependency_map.local_output_dependency_map:
                     raise KeyError(
@@ -661,16 +649,13 @@ class BaseModel:
                 given_connection = self._create_connection(edge, None)
         assert isinstance(given_connection, ConnectionData)
 
-        if (
-            given_connection.metadata.differentiable is not None
-            and given_connection.metadata.differentiable != edge.differentiable
-        ):
-            set_diff = given_connection.metadata.differentiable
+        is_diff = given_connection.metadata.differentiable
+        if is_diff is not None and is_diff != edge.differentiable:
+            set_diff = is_diff
 
         # Connection is given as a Connection object.
-        if (
-            con_obj := self.conns.get_con_by_metadata(given_connection.metadata)
-        ) is None:
+        con_obj = self.conns.get_con_by_metadata(given_connection.metadata)
+        if con_obj is None:
             if given_connection.model is not None:
                 raise KeyError("Requires accessible connection to be processed!")
             is_new_connection = True
@@ -950,11 +935,7 @@ class BaseModel:
             raise AttributeError("Child model could not be re-extended!")
         if self == model:
             raise KeyError("Model can not extend with itself!")
-        if self._enforce_jit and not model.jittable:
-            raise Exception(
-                "Model with enforced Jit can not be extended by a non-jittable model! \
-                            Jit can be unforced by setting enforce_jit = False"
-            )
+
         if model.name is not None:
             # TODO: We could store model names in a set to check if it is unique.
             for m in self.dag:
@@ -1005,8 +986,6 @@ class BaseModel:
         model.constraint_solver.clear()
         model.conns._connections_dict = {}
 
-        # Update jittablity by using model's jittablity.
-        self._jittable &= model.jittable
         if not self.provisional_source:
             model.conns._connections_dict = None
             model._constraint_solver = None
@@ -1093,6 +1072,11 @@ class BaseModel:
                 if _con.model is model:
                     _con.model = None
 
+            # Manually add only required constraints into constraint_solver.
+            _constr_map = self.constraint_solver.constraint_map
+            for con in conns.values():
+                for constr in con.metadata.all_constraints:
+                    _constr_map[constr] = model.constraint_solver.constraint_map[constr]
             # Extend the self model with submodel.
             self.extend(sub_m, **conns)
         # Clear the connections_dict and metadata_dict of the submodel.
@@ -1518,14 +1502,6 @@ class BaseModel:
         if self._model_name == "":
             return self.__class__.__name__
         return self._model_name
-
-    @property
-    def enforce_jit(self) -> bool:
-        return self._enforce_jit
-
-    @enforce_jit.setter
-    def enforce_jit(self, value: bool) -> None:
-        self._enforce_jit = value
 
     @property
     def jittable(self) -> bool:

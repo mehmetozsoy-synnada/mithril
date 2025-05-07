@@ -29,9 +29,10 @@ from mithril.models import Add, Concat, Linear, Model
 @dataclass
 class FluxParams:
     in_channels: int
+    out_channels: int
     vec_in_dim: int
     context_in_dim: int
-    hidden_size: int
+    hidden_size: int  # 3072
     mlp_ratio: float
     num_heads: int
     depth: int
@@ -45,10 +46,10 @@ class FluxParams:
 def flux(params: FluxParams):
     flux = Model()
 
-    img = IOKey("img", shape=[1, 4096, 64])
-    txt = IOKey("txt", shape=[1, 512, 4096])
+    img = IOKey("img", shape=[1, params.context_in_dim, params.in_channels])
+    txt = IOKey("txt", shape=[1, 512, params.context_in_dim])
 
-    img_ids = IOKey("img_ids", shape=[1, 4096, 3])
+    img_ids = IOKey("img_ids", shape=[1, params.context_in_dim, 3])
     txt_ids = IOKey("txt_ids", shape=[1, 512, 3])
 
     timesteps = IOKey("timesteps", shape=[1])
@@ -127,6 +128,6 @@ def flux(params: FluxParams):
     img = img[:, 512:, ...]  # type: ignore
 
     flux |= last_layer(
-        params.hidden_size, 1, params.in_channels, name="final_layer"
+        params.hidden_size, 1, params.out_channels, name="final_layer"
     ).connect(input=img, vec="vec", output=IOKey("output"))
     return flux

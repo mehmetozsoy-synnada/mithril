@@ -18,16 +18,15 @@ from mithril import IOKey
 from mithril.models import (
     Add,
     BroadcastTo,
-    Buffer,
     Convolution2D,
     GroupNorm,
     Model,
     Multiply,
     Pad,
-    Randn,
     Reshape,
     ScaledDotProduct,
     SiLU,
+    Split,
     Subtract,
     Transpose,
 )
@@ -238,21 +237,15 @@ def decoder(
 
 
 def diagonal_gaussian(sample: bool = True, chunk_dim: int = 1):
-    block = Model()
-
     input = IOKey("input")
-    input = input.split(2, axis=1)  # type: ignore
-
+    split_output = Split(axis=chunk_dim, split_size=2)(input)
+    mean = split_output[0]
+    log_var = split_output[1]
     if sample:
-        std = (input[1] * 0.5).exp()
-        mean = input[0]
-        block |= Randn().connect(shape=mean.shape, output="randn")
-        output = mean + std * block.randn  # type: ignore[attr-defined]
+        std = (0.5 * log_var).exp()
+        return Model.create(output=std)
     else:
-        output = input[0]
-
-    block |= Buffer().connect(input=output, output=IOKey("output"))
-    return block
+        return Model.create(output=mean)
 
 
 def auto_encoder(
@@ -295,3 +288,22 @@ def decode(ae_params: AutoEncoderParams):
     ).connect(input=input, output="output")
 
     return model
+
+
+def encode(ae_params: AutoEncoderParams) -> Model:
+    input = IOKey("input")
+
+    encoder_model = encoder(
+        ae_params.ch,
+        ae_params.ch_mult,
+        ae_params.num_res_blocks,
+        ae_params.z_channels,
+        name="encoder",
+    )
+
+    diag_gaussian_model = diagonal_gaussian()
+
+    output = diag_gaussian_model(input=encoder_model(input=input))
+    output = ae_params.scale_factor * (output - ae_params.shift_factor)
+
+    return Model.create(output=output)

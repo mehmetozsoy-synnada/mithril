@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import torch
-from auto_encoder import AutoEncoderParams, decode
+from auto_encoder import AutoEncoderParams, decode, encode
 from conditioner import HFEmbedder
 from einops import rearrange
 from huggingface_hub import hf_hub_download
@@ -92,6 +92,7 @@ configs = {
         ckpt_path=os.getenv("FLUX_DEV"),
         params=FluxParams(
             in_channels=64,
+            out_channels=64,
             vec_in_dim=768,
             context_in_dim=4096,
             hidden_size=3072,
@@ -124,6 +125,7 @@ configs = {
         ckpt_path=os.getenv("FLUX_SCHNELL"),
         params=FluxParams(
             in_channels=64,
+            out_channels=64,
             vec_in_dim=768,
             context_in_dim=4096,
             hidden_size=3072,
@@ -135,6 +137,39 @@ configs = {
             theta=10_000,
             qkv_bias=True,
             guidance_embed=False,
+        ),
+        ae_path=os.getenv("AE"),
+        ae_params=AutoEncoderParams(
+            resolution=256,
+            in_channels=3,
+            ch=128,
+            out_ch=3,
+            ch_mult=[1, 2, 4, 4],
+            num_res_blocks=2,
+            z_channels=16,
+            scale_factor=0.3611,
+            shift_factor=0.1159,
+        ),
+    ),
+    "flux-dev-fill": ModelSpec(
+        repo_id="black-forest-labs/FLUX.1-Fill-dev",
+        repo_flow="flux1-fill-dev.safetensors",
+        repo_ae="ae.safetensors",
+        ckpt_path=os.getenv("FLUX_DEV_FILL"),
+        params=FluxParams(
+            in_channels=384,
+            out_channels=64,
+            vec_in_dim=768,
+            context_in_dim=4096,
+            hidden_size=3072,
+            mlp_ratio=4.0,
+            num_heads=24,
+            depth=19,
+            depth_single_blocks=38,
+            axes_dim=[16, 56, 56],
+            theta=10_000,
+            qkv_bias=True,
+            guidance_embed=True,
         ),
         ae_path=os.getenv("AE"),
         ae_params=AutoEncoderParams(
@@ -218,6 +253,44 @@ def load_decoder(
     params = convert_to_ml_weights(decoder_pm.shapes, result, backend, ml.bfloat16)
 
     return decoder_lm, params
+
+
+def load_encoder(
+    name: str, backend: ml.Backend, hf_download: bool = True
+) -> tuple[ml.models.Model, dict]:
+    ckpt_path = configs[name].ae_path
+    if (
+        ckpt_path is None
+        and (r_id := configs[name].repo_id) is not None
+        and (r_ae := configs[name].repo_ae) is not None
+        and hf_download
+    ):
+        ckpt_path = hf_hub_download(r_id, r_ae)
+
+    # Loading the autoencoder
+    print("Init AE")
+    encoder_lm = encode(configs[name].ae_params)
+    encoder_lm.set_shapes(input=[1, 3, 128, 128])
+
+    encoder_pm = ml.compile(
+        encoder_lm,
+        backend=backend,
+        inference=True,
+        jit=False,
+        data_keys=["input"],
+        # shapes={"input": [1, 16, 128, 128]},
+        use_short_namings=False,
+    )
+
+    assert ckpt_path is not None
+
+    sd = safe_open(ckpt_path, "pt" if backend.backend_type == "torch" else "jax", "cpu")
+    result = {}
+    for k in sd.keys():  # type: ignore #noqa SIM118
+        result[k] = sd.get_tensor(k)  # type: ignore
+    params = convert_to_ml_weights(encoder_pm.shapes, result, backend, ml.bfloat16)
+
+    return encoder_lm, params
 
 
 class WatermarkEmbedder:

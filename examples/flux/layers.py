@@ -220,10 +220,10 @@ def double_stream_block(
     *,
     name: str | None = None,
 ):
-    img = IOKey("img", shape=[1, 4096, 3072])
-    txt = IOKey("txt", shape=(1, 512, 3072))
-    vec = IOKey("vec", shape=(1, 3072))
-    pe = IOKey("pe", shape=(1, 1, 4608, 64, 2, 2))
+    img = IOKey("img")
+    txt = IOKey("txt")
+    vec = IOKey("vec")
+    pe = IOKey("pe")
 
     mlp_hidden_dim = int(hidden_size * mlp_ratio)
 

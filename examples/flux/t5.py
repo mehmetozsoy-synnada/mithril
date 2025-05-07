@@ -177,7 +177,7 @@ def download_t5_encoder_weights(
     return sanitize(weights)
 
 
-def load_t5_encoder(name: str, max_len: int = 256) -> ml.models.PhysicalModel:
+def load_t5_encoder(name: str, max_len: int = 256) -> ml.models.Model:
     config_path = hf_hub_download(configs[name].repo_id, "text_encoder_2/config.json")
 
     with open(config_path) as f:

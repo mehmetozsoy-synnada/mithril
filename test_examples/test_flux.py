@@ -272,7 +272,7 @@ class TestLayers:
             "in_channels": 3,
             "ch": 128,
             "ch_mult": [1, 2, 4, 4],
-            "num_res_blocks": 2,
+            "num_res_blocks": 4,
             "z_channels": 16,
         }
         m_model = encoder(**params)  # type: ignore

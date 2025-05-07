@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable
+from copy import deepcopy
 
 import torch
 
@@ -27,7 +28,6 @@ from mithril.models import (
     Ones,
     Randn,
     Reshape,
-    Transpose,
 )
 
 
@@ -116,28 +116,18 @@ def get_lin_function(
     return lambda x: m * x + b
 
 
-def unpack_logical(
-    model: ml.models.Model, input: ml.models.Connection, height: int, width: int
-) -> ml.models.Model:
-    b = 1
+def unpack(
+    input: ml.models.Connection, height: int, width: int
+) -> ml.models.Connection:
     h = math.ceil(height / 16)
     w = math.ceil(width / 16)
-    ph = 2
-    pw = 2
+    b = input.shape[0]
 
-    model |= Reshape(shape=(b, h, w, -1, ph, pw)).connect(
-        input=input, output=IOKey("reshaped")
-    )
+    input = input.reshape((b, h, w, -1, 2, 2))
+    input = input.transpose((0, 3, 1, 4, 2, 5))
+    input = input.reshape((b, -1, 2 * h, 2 * w))
 
-    model |= Transpose(axes=(0, 3, 1, 4, 2, 5)).connect(
-        input="reshaped", output=IOKey("transposed")
-    )
-
-    model |= Reshape(shape=(b, -1, h * ph, w * pw)).connect(
-        input="transposed", output=IOKey("result")
-    )
-
-    return model.result  # type: ignore
+    return input
 
 
 def denoise(
@@ -174,3 +164,146 @@ def denoise(
         img = img + (t_prev - t_curr) * pred["output"]  # type: ignore[operator]
 
     return img
+
+
+def get_noise(
+    num_samples: int,
+    height: int,
+    width: int,
+    seed: int,
+) -> ml.models.Connection:
+    height = 2 * math.ceil(height / 16)
+    width = 2 * math.ceil(width / 16)
+    noise_model = Randn(shape=(num_samples, 16, height, width))
+    noise_model.set_values(key=seed, initial=True)
+    return noise_model.output
+
+
+def prepare(
+    t5: ml.models.Model, clip: ml.models.Model, img: ml.models.Connection
+) -> ml.models.Model:
+    bs = img.shape[0]
+    c = img.shape[1]
+    h = img.shape[2]
+    w = img.shape[3]
+
+    img = img.reshape((bs, c, h // 2, 2, w // 2, 2))
+    img = img.transpose((0, 2, 4, 1, 3, 5))
+    img = img.reshape((bs, -1, c * 4))
+
+    img_id_1 = Ones()(shape=(h // 2, w // 2)) * 0.0
+    img_id_2 = BroadcastTo()(Arange()(stop=(h // 2))[:, None], (h // 2, w // 2, 1))
+    img_id_3 = BroadcastTo()(Arange()(stop=(w // 2))[None, :], (h // 2, w // 2, 1))
+
+    img_ids = Concat(axis=-1)([img_id_1, img_id_2, img_id_3])
+    img_ids = img_ids.reshape((bs, -1, 3))
+
+    txt = t5(IOKey("t5_tokens"))
+    txt_ids = Ones()(shape=(bs, txt.shape[1], 3)) * 0.0
+
+    vec = clip(IOKey("clip_tokens"))
+
+    return ml.models.Model.create(
+        img=img, img_ids=img_ids, txt=txt, txt_ids=txt_ids, vec=vec
+    )
+
+
+def prepare_fill(
+    t5: ml.models.Model,
+    clip: ml.models.Model,
+    img: ml.models.Connection,
+    encoder: ml.models.Model,
+):
+    img_cond = IOKey("img_cond")
+    img_cond = img_cond / 127.5 - 1.0
+    img_cond = img_cond.transpose((1, 2, 0))[None, ...]
+
+    mask = IOKey("mask")
+    mask = mask / 255.0
+    mask = mask[None, None, ...]
+
+    img_cond = img_cond * (1 - mask)
+    img_cond = encoder(input=img_cond)
+
+    mask = mask[:, 0, :, :]
+    b_mask = mask.shape[0]
+    h_mask = mask.shape[1]
+    w_mask = mask.shape[2]
+
+    # rearrange(mask,"b (h ph) (w pw) -> b (ph pw) h w", ph=8, pw=8)
+    mask = mask.reshape((b_mask, h_mask // 8, 8, w_mask // 8, 8))
+    mask = mask.transpose((0, 2, 4, 1, 3))
+    mask = mask.reshape((b_mask, 64, h_mask // 8, w_mask // 8))
+
+    # rearrange(mask, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+    mask = mask.reshape((b_mask, 64, h_mask // 16, 2, w_mask // 16, 2))
+    mask = mask.transpose((0, 2, 4, 1, 3, 5))
+    mask = mask.reshape((b_mask, -1, 256))
+
+    b_cond = img_cond.shape[0]
+    c_cond = img_cond.shape[1]
+    h_cond = img_cond.shape[2]
+    w_cond = img_cond.shape[3]
+
+    # rearrange(img_cond, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+    img_cond = img_cond.reshape((b_cond, c_cond, h_cond // 2, 2, w_cond // 2, 2))
+    img_cond = img_cond.transpose((0, 2, 4, 1, 3, 5))
+    img_cond = img_cond.reshape((b_cond, -1, c_cond * 4))
+
+    img_cond = Concat(axis=-1)([img_cond, mask])
+
+    prepare_model = prepare(t5, clip, img)
+
+    img, img_ids, txt, txt_ids, vec = prepare_model(
+        t5_tokens=IOKey("t5_tokens"), clip_tokens=IOKey("clip_tokens")
+    )  # type: ignore
+    return ml.models.Model.create(
+        img=img,
+        img_ids=img_ids,  # type: ignore
+        txt=txt,  # type: ignore
+        txt_ids=txt_ids,  # type: ignore
+        vec=vec,  # type: ignore
+        img_cond=img_cond,  # type: ignore
+    )
+
+
+def denoise_logical(
+    flux_model: ml.models.Model,
+    img: ml.models.Connection,
+    img_ids: ml.models.Connection,
+    txt: ml.models.Connection,
+    txt_ids: ml.models.Connection,
+    vec: ml.models.Connection,
+    timesteps: list[float],
+    guidance: float = 4.0,
+    img_cond: ml.models.Connection | None = None,
+):
+    guidance_vec = Ones()(shape=img.shape[0]) * guidance
+
+    weigth_kwargs = {
+        key: value
+        for key, value in zip(
+            flux_model.input_keys,
+            [key for key in flux_model.conns.input_connections],
+            strict=False,
+        )
+        if "$" in key
+    }
+
+    for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:], strict=False):
+        t_vec = Ones()(shape=img.shape[0]) * t_curr
+
+        pred = flux_model(
+            img=Concat()((img, img_cond), axis=-1) if img_cond is not None else img,
+            img_ids=img_ids,
+            txt=txt,
+            txt_ids=txt_ids,
+            y=vec,
+            timesteps=t_vec,
+            guidance=guidance_vec,
+            **weigth_kwargs,
+        )
+        img = img + (t_prev - t_curr) * pred
+        flux_model = deepcopy(flux_model)
+
+    return ml.models.Model.create(pred=img)

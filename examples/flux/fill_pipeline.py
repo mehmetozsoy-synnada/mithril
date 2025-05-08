@@ -39,7 +39,7 @@ def main(
     seed: int = 42,
     prompt: str = "a white paper cup",
     device: str = "cuda",
-    num_steps: int = 30,
+    num_steps: int = 2,
     guidance: float = 30.0,
     output_dir: str = "output",
     img_cond_path: str = "examples/flux/assets/cup.png",

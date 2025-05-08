@@ -29,7 +29,7 @@ from safetensors import safe_open
 import mithril as ml
 
 
-def load_t5(device: str | torch.device = "cuda", max_length: int = 512) -> HFEmbedder:
+def load_t5(device: str | torch.device = "cuda", max_length: int = 128) -> HFEmbedder:
     # max length 64, 128, 256 and 512 should work (if your sequence is short enough)
     return HFEmbedder(
         "google/t5-v1_1-xxl", max_length=max_length, torch_dtype=torch.bfloat16
@@ -218,7 +218,7 @@ def load_flow_model(name: str, backend: ml.Backend, hf_download: bool = True):
 
 
 def load_decoder(
-    name: str, backend: ml.Backend, hf_download: bool = True
+    name: str, backend: ml.Backend, width:int, height:int, hf_download: bool = True
 ) -> tuple[ml.models.Model, dict]:
     ckpt_path = configs[name].ae_path
     if (
@@ -232,7 +232,7 @@ def load_decoder(
     # Loading the autoencoder
     print("Init AE")
     decoder_lm = decode(configs[name].ae_params)
-    decoder_lm.set_shapes(input=[1, 16, 128, 128])
+    decoder_lm.set_shapes(input=[1, 16, height // 8, width // 8])
 
     decoder_pm = ml.compile(
         decoder_lm,
@@ -240,7 +240,6 @@ def load_decoder(
         inference=True,
         jit=False,
         data_keys=["input"],
-        shapes={"input": [1, 16, 128, 128]},
         use_short_namings=False,
     )
 
@@ -256,7 +255,7 @@ def load_decoder(
 
 
 def load_encoder(
-    name: str, backend: ml.Backend, hf_download: bool = True
+    name: str, backend: ml.Backend, width:int, height:int, hf_download: bool = True
 ) -> tuple[ml.models.Model, dict]:
     ckpt_path = configs[name].ae_path
     if (
@@ -270,7 +269,7 @@ def load_encoder(
     # Loading the autoencoder
     print("Init AE")
     encoder_lm = encode(configs[name].ae_params)
-    encoder_lm.set_shapes(input=[1, 3, 128, 128])
+    encoder_lm.set_shapes(input=[1, 3, height, width])
 
     encoder_pm = ml.compile(
         encoder_lm,

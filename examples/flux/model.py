@@ -46,11 +46,11 @@ class FluxParams:
 def flux(params: FluxParams):
     flux = Model()
 
-    img = IOKey("img", shape=[1, params.context_in_dim, params.in_channels])
-    txt = IOKey("txt", shape=[1, 512, params.context_in_dim])
+    img = IOKey("img", shape=[1, 4096, params.in_channels]) # 7854
+    txt = IOKey("txt", shape=[1, 128, params.context_in_dim])
 
-    img_ids = IOKey("img_ids", shape=[1, params.context_in_dim, 3])
-    txt_ids = IOKey("txt_ids", shape=[1, 512, 3])
+    img_ids = IOKey("img_ids", shape=[1, 4096, 3])
+    txt_ids = IOKey("txt_ids", shape=[1, 128, 3])
 
     timesteps = IOKey("timesteps", shape=[1])
     y = IOKey("y", shape=[1, 768])
@@ -124,8 +124,7 @@ def flux(params: FluxParams):
         img_name = f"img_single_{i}"
 
     img = getattr(flux, img_name)
-    # TODO: [:, txt.shape[1] :, ...]
-    img = img[:, 512:, ...]  # type: ignore
+    img = img[:, txt.shape[1] :, ...]  # type: ignore
 
     flux |= last_layer(
         params.hidden_size, 1, params.out_channels, name="final_layer"

@@ -24,7 +24,7 @@ from PIL import Image
 from sampling import (
     get_schedule,
     prepare_logical,
-    unpack_logical,
+    unpack,
 )
 from t5 import download_t5_encoder_weights, load_t5_encoder, load_t5_tokenizer
 from tqdm import tqdm
@@ -56,7 +56,7 @@ def run(
     width: int = 1024,
     height: int = 1024,
     prompt: str = "A girl with green eyes on the a wooden bridge",
-    device: str = "cpu",
+    device: str = "cuda",
     output_dir: str = "temp",
     num_steps: int | None = None,
     guidance: float = 3.5,
@@ -71,6 +71,7 @@ def run(
     if num_steps is None:
         num_steps = 4 if model_name == "flux-schnell" else 28
 
+    num_steps = 4
     # allow for packing and conversion to latent space
     height = 16 * (height // 16)
     width = 16 * (width // 16)
@@ -111,7 +112,7 @@ def run(
 
     prepare_logical(flux_pipeline, t5_lm, clip_lm, 1, opts.width, opts.height)
 
-    decoder_lm, decoder_params = load_decoder(model_name, backend=backend)
+    decoder_lm, decoder_params = load_decoder(model_name, backend, 1024, 1024)
     decoder_lm.name = "decoder"
 
     timesteps = get_schedule(
@@ -170,9 +171,9 @@ def run(
 
         img = img + (t_prev - t_curr) * getattr(flux_pipeline, flow_out)
 
-    unpacked_img = unpack_logical(flux_pipeline, img, opts.height, opts.width)
+    unpacked_img = unpack(img, opts.height, opts.width)
 
-    flux_pipeline |= decoder_lm(input=unpacked_img, output="decoded")
+    flux_pipeline |= decoder_lm.connect(input=unpacked_img, output="decoded")
     flux_pipeline |= Transpose(axes=(0, 2, 3, 1)).connect(
         input="decoded", output=IOKey("output")
     )
@@ -188,26 +189,29 @@ def run(
     print("Compiling Pipeline")
     s_time = time.perf_counter()
     denoise_pm = ml.compile(
-        flux_pipeline, backend, inference=True, jit=True, use_short_namings=False
+        flux_pipeline, backend, inference=True, jit=False, use_short_namings=False
     )
     e_time = time.perf_counter()
     print(f"Time taken for compilation: {e_time - s_time} seconds")
 
+    denoise_pm.summary()
     clip_inp = clip_tokenizer.encode(opts.prompt)
     t5_inp = t5_tokenizer.encode(opts.prompt)
 
     inp = {"clip_tokens": clip_inp, "t5_tokens": t5_inp}
 
     # Warmup
+    state = denoise_pm.initial_state_dict
     for _ in tqdm(range(5)):
-        x = denoise_pm.evaluate(params, inp)["output"]
+        output, state = denoise_pm.evaluate(params, inp, state = state)
 
     # Actual inference
     s_time = time.perf_counter()
     for _ in tqdm(range(10)):
-        x = denoise_pm.evaluate(params, inp)["output"]
+       output, state = denoise_pm.evaluate(params, inp, state = state)
     e_time = time.perf_counter()
     print(f"Time taken: {e_time - s_time} seconds")
+    x = output["output"]
 
     img_pil = Image.fromarray(
         np.array(127.5 * (x.float().cpu()[0] + 1.0)).clip(0, 255).astype(np.uint8)  # type: ignore

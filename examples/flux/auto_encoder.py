@@ -29,7 +29,9 @@ from mithril.models import (
     Split,
     Subtract,
     Transpose,
+    Randn
 )
+from mithril.framework.common import TBD
 
 
 @dataclass
@@ -238,12 +240,16 @@ def decoder(
 
 def diagonal_gaussian(sample: bool = True, chunk_dim: int = 1):
     input = IOKey("input")
-    split_output = Split(axis=chunk_dim, split_size=2)(input)
+    split_output = Split(axis=chunk_dim, split_size=2)(input = input)
     mean = split_output[0]
     log_var = split_output[1]
     if sample:
+        rand_model = Randn()
         std = (0.5 * log_var).exp()
-        return Model.create(output=std)
+        _, rand_out = rand_model(shape = mean.shape) 
+        std_out = std * rand_out
+        output = mean + std_out
+        return Model.create(output=output)
     else:
         return Model.create(output=mean)
 

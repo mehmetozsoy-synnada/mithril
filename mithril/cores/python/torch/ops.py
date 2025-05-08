@@ -1201,11 +1201,10 @@ def randn(
     device: str,
     default_dtype: str,
 ) -> torch.Tensor:
-    generator = torch.manual_seed(key)
     if dtype is None:
         dtype = default_dtype
     return torch.randn(
-        shape, generator=generator, device=device, dtype=dtype_map[dtype]
+        shape, device=device, dtype=dtype_map[dtype]
     )
 
 
@@ -1219,11 +1218,10 @@ def randint(
     device: str,
     default_dtype: str,
 ) -> torch.Tensor:
-    generator = torch.manual_seed(key)
     if dtype is None:
         dtype = "int32"
     return torch.randint(
-        low, high, shape, generator=generator, device=device, dtype=dtype_map[dtype]
+        low, high, shape, device=device, dtype=dtype_map[dtype]
     )
 
 

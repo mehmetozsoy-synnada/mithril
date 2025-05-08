@@ -239,6 +239,7 @@ def clip_text_model(config: dict[str, Any], name: str | None = None):
         output="output",
     )
     block.expose_keys("output")
+    block.set_cout("output")
     return block
 
 

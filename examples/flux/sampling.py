@@ -175,13 +175,12 @@ def get_noise(
     height = 2 * math.ceil(height / 16)
     width = 2 * math.ceil(width / 16)
     noise_model = Randn(shape=(num_samples, 16, height, width))
-    noise_model.set_values(key=seed, initial=True)
     return noise_model.output
 
 
 def prepare(
     t5: ml.models.Model, clip: ml.models.Model, img: ml.models.Connection
-) -> ml.models.Model:
+) -> dict[str, ml.models.Connection]:
     bs = img.shape[0]
     c = img.shape[1]
     h = img.shape[2]
@@ -192,20 +191,29 @@ def prepare(
     img = img.reshape((bs, -1, c * 4))
 
     img_id_1 = Ones()(shape=(h // 2, w // 2)) * 0.0
-    img_id_2 = BroadcastTo()(Arange()(stop=(h // 2))[:, None], (h // 2, w // 2, 1))
-    img_id_3 = BroadcastTo()(Arange()(stop=(w // 2))[None, :], (h // 2, w // 2, 1))
-
-    img_ids = Concat(axis=-1)([img_id_1, img_id_2, img_id_3])
+    
+    img_id_2 = Arange()(stop=(h // 2))[:, None]
+    img_id_2 = BroadcastTo()(input = img_id_2, shape = (h // 2, w // 2))
+    
+    img_id_3 = Arange()(stop=(w // 2))[None, :]
+    img_id_3 = BroadcastTo()(input = img_id_2, shape = (h // 2, w // 2))
+    
+    img_ids = Concat(axis=-1)(input = [img_id_1[..., None], img_id_2[..., None], img_id_3[..., None]])
+    
     img_ids = img_ids.reshape((bs, -1, 3))
 
-    txt = t5(IOKey("t5_tokens"))
+    txt = t5(input = IOKey("t5_tokens"))
     txt_ids = Ones()(shape=(bs, txt.shape[1], 3)) * 0.0
 
-    vec = clip(IOKey("clip_tokens"))
-
-    return ml.models.Model.create(
-        img=img, img_ids=img_ids, txt=txt, txt_ids=txt_ids, vec=vec
-    )
+    vec = clip(input = IOKey("clip_tokens"))
+    
+    return {
+        "img": img,
+        "img_ids": img_ids, 
+        "txt": txt, 
+        "txt_ids": txt_ids,
+        "vec": vec
+    }
 
 
 def prepare_fill(
@@ -216,12 +224,11 @@ def prepare_fill(
 ):
     img_cond = IOKey("img_cond")
     img_cond = img_cond / 127.5 - 1.0
-    img_cond = img_cond.transpose((1, 2, 0))[None, ...]
+    img_cond = img_cond.transpose((2, 0, 1))[None, ...]
 
     mask = IOKey("mask")
     mask = mask / 255.0
     mask = mask[None, None, ...]
-
     img_cond = img_cond * (1 - mask)
     img_cond = encoder(input=img_cond)
 
@@ -250,21 +257,11 @@ def prepare_fill(
     img_cond = img_cond.transpose((0, 2, 4, 1, 3, 5))
     img_cond = img_cond.reshape((b_cond, -1, c_cond * 4))
 
-    img_cond = Concat(axis=-1)([img_cond, mask])
+    img_cond = Concat(axis=-1)(input = [img_cond, mask])
 
-    prepare_model = prepare(t5, clip, img)
-
-    img, img_ids, txt, txt_ids, vec = prepare_model(
-        t5_tokens=IOKey("t5_tokens"), clip_tokens=IOKey("clip_tokens")
-    )  # type: ignore
-    return ml.models.Model.create(
-        img=img,
-        img_ids=img_ids,  # type: ignore
-        txt=txt,  # type: ignore
-        txt_ids=txt_ids,  # type: ignore
-        vec=vec,  # type: ignore
-        img_cond=img_cond,  # type: ignore
-    )
+    kwargs = prepare(t5, clip, img)
+    kwargs["img_cond"] = img_cond
+    return kwargs
 
 
 def denoise_logical(
@@ -278,23 +275,22 @@ def denoise_logical(
     guidance: float = 4.0,
     img_cond: ml.models.Connection | None = None,
 ):
-    guidance_vec = Ones()(shape=img.shape[0]) * guidance
+    guidance_vec = Ones()(shape=[img.shape[0]]) * guidance
 
     weigth_kwargs = {
-        key: value
-        for key, value in zip(
-            flux_model.input_keys,
-            [key for key in flux_model.conns.input_connections],
-            strict=False,
-        )
+        key: IOKey()
+        for key in flux_model.input_keys
         if "$" in key
     }
-
+    i = 0
     for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:], strict=False):
-        t_vec = Ones()(shape=img.shape[0]) * t_curr
+        print(f"denoise step {i}")
+        t_vec = Ones()(shape=[img.shape[0]]) * t_curr
+        _flux_model = deepcopy(flux_model)
+        
 
-        pred = flux_model(
-            img=Concat()((img, img_cond), axis=-1) if img_cond is not None else img,
+        pred = _flux_model(
+            img=Concat(axis = -1)((img, img_cond)) if img_cond is not None else img,
             img_ids=img_ids,
             txt=txt,
             txt_ids=txt_ids,
@@ -303,7 +299,9 @@ def denoise_logical(
             guidance=guidance_vec,
             **weigth_kwargs,
         )
+        print(f"img shape: {img.metadata.shape.get_shapes()}")
+        print(f"pred shape: {pred.metadata.shape.get_shapes()}")
         img = img + (t_prev - t_curr) * pred
-        flux_model = deepcopy(flux_model)
+        i += 1
 
-    return ml.models.Model.create(pred=img)
+    return pred

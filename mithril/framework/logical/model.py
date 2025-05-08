@@ -472,7 +472,7 @@ class Model(BaseModel):
 
     def __call__(
         self,
-        *args: ConnectionType | MainValueType | Tensor[int | float | bool],
+        # *args: ConnectionType | MainValueType | Tensor[int | float | bool],
         **kwargs: ConnectionType | MainValueType | Tensor[int | float | bool],
     ) -> Connection:
         # Create a provisional model.

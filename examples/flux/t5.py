@@ -78,7 +78,7 @@ def sanitize(weights):
 
 
 class T5Tokenizer:
-    def __init__(self, model_file, backend: ml.Backend, max_length=512):
+    def __init__(self, model_file, backend: ml.Backend, max_length=128):
         self._tokenizer = SentencePieceProcessor(model_file)
         self.max_length = max_length
         self.backend = backend
@@ -192,5 +192,5 @@ def load_t5_encoder(name: str, max_len: int = 256) -> ml.models.Model:
 def load_t5_tokenizer(backend: ml.Backend, name: str, pad: bool = True):
     model_file = hf_hub_download(configs[name].repo_id, "tokenizer_2/spiece.model")
     return T5Tokenizer(
-        model_file, backend, 256 if "schnell" in configs[name].repo_id else 512
+        model_file, backend, 128
     )

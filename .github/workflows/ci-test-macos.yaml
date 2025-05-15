@@ -6,10 +6,11 @@ on:
     branches: [ dev, main ]
   workflow_dispatch: 
   
+permissions: write-all
+  
 env:
   CI: true
 jobs:
-
   pre_ci_checks:
     runs-on: self-hosted
     outputs:
@@ -32,19 +33,9 @@ jobs:
           fi
           echo "cond=$COND" >> $GITHUB_OUTPUT
 
-      - name: Clear cache if large
-        run: |
-          MAX_SIZE_GB=20
-
-          CONDA_PKGS_DIR=$(conda info --base)/pkgs
-          CURRENT_SIZE_GB=$(du -s "$CONDA_PKGS_DIR" | awk '{print $1 / 1024 / 1024}')
-
-          if (( $(echo "$CURRENT_SIZE_GB > $MAX_SIZE_GB" | bc -l) )); then
-              conda clean --all -y
-          fi
-  
-
   build:
+    env:
+      conda_env_name: mithril-test-ci-${{ github.run_id }}
     runs-on: self-hosted
     needs: pre_ci_checks
     strategy:
@@ -59,10 +50,9 @@ jobs:
 
       - name: Create Conda ennvironment with ${{ matrix.python-version }}
         run: |
-          
-          conda create -n mithril-test-ci python=${{ matrix.python-version }} -y
+          conda create -n ${{env.conda_env_name}} python=${{ matrix.python-version }} -y
           source activate base
-          source activate mithril-test-ci
+          source activate ${{env.conda_env_name}}
 
       - name: Make compile scripts executable
         run: |
@@ -80,15 +70,15 @@ jobs:
           popd
       - name: Install Python dependencies
         run: |
-          source activate mithril-test-ci
+          source activate ${{env.conda_env_name}}
           pip install -r requirements/dev.txt
       - name: Run pre-commit
         run: |
-          source activate mithril-test-ci
+          source activate ${{env.conda_env_name}}
           pre-commit run --all-files
       - name: Execute testcase unit tests
         run: |
-          source activate mithril-test-ci
+          source activate ${{env.conda_env_name}}
           pytest --cov --cov-report=xml -s tests/
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
@@ -97,22 +87,28 @@ jobs:
       - name: Deactivate and remove environment
         run: |
           source activate base
-          conda remove -n mithril-test-ci --all -y
+          conda remove -n ${{env.conda_env_name}} --all -y
 
 
   on_failure:
     needs: build
     runs-on: macos-15-xlarge
     env:
-      GH_TOKEN: ${{ github.token }}
-    if: ${{ failure() }}
+      GH_TOKEN: ${{ secrets.BOT_TOKEN_READ_WRITE }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-      - name: review_pr
-        id: review-pr
+
+      - name: request changes
+        if: ${{ failure() && github.event_name == 'pull_request' }}
         run: |
           gh pr review ${{ github.event.pull_request.number }} -r -b "Tests are failed. Please review the PR."
+          exit 1
+
+      - name: approve
+        if: ${{ success() && github.event_name == 'pull_request' }}
+        run: |
+          gh pr review ${{ github.event.pull_request.number }} -a
           exit 1
 
   deactivate_and_delete_environment:
@@ -127,4 +123,4 @@ jobs:
       - name: remove conda environment
         run: |
           source activate base
-          conda remove -n mithril-test-ci --all -y
+          conda remove -n mithril-test-ci-${{ github.run_id }} --all -y

@@ -94,7 +94,7 @@ jobs:
     needs: build
     runs-on: macos-15-xlarge
     env:
-      GH_TOKEN: ${{ secrets.BOT_TOKEN_READ_WRITE }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4

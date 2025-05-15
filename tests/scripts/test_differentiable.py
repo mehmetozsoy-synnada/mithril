@@ -343,3 +343,15 @@ def test_diff_inference_add_connection_without_model():
     model = Model()
     model += Add().connect(left, "right", "output")
     assert not model.left.metadata.differentiable  # type: ignore
+
+
+def test_diff_set_type():
+    tensor: Tensor = Tensor()
+    tensor.set_type(bool)
+    assert tensor.differentiable is False
+    tensor = Tensor()
+    tensor.set_type(int)
+    assert tensor.differentiable is False
+    tensor = Tensor()
+    tensor.set_type(float)
+    assert tensor.differentiable is None

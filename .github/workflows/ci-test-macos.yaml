@@ -93,11 +93,14 @@ jobs:
   on_failure:
     needs: build
     runs-on: macos-15-xlarge
+    permissions:
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
+
 
       - name: request changes
         if: ${{ failure() && github.event_name == 'pull_request' }}

@@ -1054,20 +1054,34 @@ def functional(func: Callable[..., Any]) -> Callable[..., Any]:
         # Extract name from kwargs if provided
         name = kwargs.pop("name", None)
 
-        # Create a list of temporary Connection objects for each argument.
-        inputs = [Connection() for _ in range(len(args))]
+        # seperate kwargs with connections and other connections
+        kwargs_connections = {
+            key: value for key, value in kwargs.items() if isinstance(value, Connection)
+        }
+        kwargs_other = {
+            key: value
+            for key, value in kwargs.items()
+            if not isinstance(value, Connection)
+        }
+
+        # Take all args and turn into kwargs with temporary keyworded connections
+        args_dict = {name: Connection(name=name) for name in input_strings}
+
+        # Take all keyworded connections and turn into kwargs with
+        # temporary keyworded connections
+        _kwargs_connections = {key: Connection(name=key) for key in kwargs_connections}
+
         # Call the function with the temporary connections and create a new model.
-        result = func(*inputs, **kwargs)
-        model = Model.create(result, name=name)
+        result = func(**(args_dict | _kwargs_connections | kwargs_other))
+        _result = (result,) if isinstance(result, Connection) else result
+        model = Model.create(*_result, name=name)
         if name is None:
             model._model_name = func.__name__
-        # Map the temporary connection names to the model.
-        for key, value in zip(input_strings, inputs, strict=False):
-            model.rename_key(value, key)
 
-        # Prepare the call keys for the model and return the model's output.
-        call_keys = {key: con for key, con in zip(input_strings, args, strict=True)}
-        return model(**call_keys)
+        _input_strings = [key for key in input_strings if key not in kwargs_connections]
+
+        call_keys = {key: con for key, con in zip(_input_strings, args, strict=True)}
+        return model(**(call_keys | kwargs_connections))
 
     return wrapper
 

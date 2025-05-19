@@ -14,7 +14,9 @@
 
 import sys
 from copy import deepcopy
+from typing import Literal
 
+import numpy as np
 import pytest
 
 import mithril as ml
@@ -27,6 +29,7 @@ from mithril.models import (
     Buffer,
     Concat,
     Convolution2D,
+    Divide,
     GroupNorm,
     Linear,
     Model,
@@ -43,6 +46,876 @@ from mithril.models import (
 )
 
 from .helper import assert_models_equal
+from .test_utils import normalize_flat_graph
+
+
+class ComparisonTestBase:
+    backend = ml.JaxBackend()
+
+    skip_flat_graph_assertion: Literal[False] | tuple[Literal[True], str] = False
+    skip_logical_assertion: Literal[False] | tuple[Literal[True], str] = False
+
+    def model1(self) -> Model:
+        # generally for models created by Model.create API
+        raise NotImplementedError("This method should be overridden in subclasses")
+
+    def model2(self) -> Model:
+        # Generally for models created by model.connect API
+        raise NotImplementedError("This method should be overridden in subclasses")
+
+    def test_assert_flat_graphs(self):
+        if self.skip_flat_graph_assertion:
+            pytest.skip(self.skip_flat_graph_assertion[1])
+
+        model1 = self.model1()
+        model2 = self.model2()
+
+        pm1 = ml.compile(
+            backend=self.backend, model=model1, inference=True, safe_names=False
+        )
+
+        pm2 = ml.compile(
+            backend=self.backend, model=model2, inference=True, safe_names=False
+        )
+
+        pm1_graph = pm1.flat_graph
+        pm2_graph = pm2.flat_graph
+
+        normalized_graph1 = normalize_flat_graph(pm1_graph)
+        normalized_graph2 = normalize_flat_graph(pm2_graph)
+
+        assert normalized_graph1 == normalized_graph2
+
+    def test_assert_logical_models(self):
+        if self.skip_logical_assertion:
+            pytest.skip(self.skip_logical_assertion[1])
+
+        model1 = self.model1()
+        model2 = self.model2()
+
+        assert_models_equal(model1, model2)
+
+
+class CompareEvaluateTestBase(ComparisonTestBase):
+    def test_assert_evaluations(self):
+        model1 = self.model1()
+        model2 = self.model2()
+
+        pm1 = ml.compile(
+            backend=self.backend,
+            model=model1,
+            trainable_keys=[key for key in model1.input_keys if key[0] != "$"],
+            inference=True,
+            safe_names=True,
+        )
+
+        pm2 = ml.compile(
+            backend=self.backend,
+            model=model2,
+            trainable_keys=[key for key in model2.input_keys if key[0] != "$"],
+            inference=True,
+            safe_names=True,
+        )
+
+        params = pm1.randomize_params()
+
+        output1 = pm1.evaluate(params, {})
+        output2 = pm2.evaluate(params, {})
+
+        for value1, value2 in zip(output1.values(), output2.values(), strict=False):
+            _value1 = np.array(value1)
+            _value2 = np.array(value2)
+            np.testing.assert_allclose(_value1, _value2)
+
+
+class TestSimpleModelWithValues(CompareEvaluateTestBase):
+    def model1(self):
+        key1 = IOKey("key1", shape=[3, 4, 5])
+        key2 = IOKey("key2", shape=[3, 4, 5])
+
+        output = (key1 + key2 * 3) / 2
+        return Model.create(output=output)
+
+    def model2(self):
+        key1 = IOKey("key1", shape=[3, 4, 5])
+        key2 = IOKey("key2", shape=[3, 4, 5])
+
+        model = Model()
+        model |= Multiply(right=3).connect(key2)
+        model |= Add().connect(key1, model.cout)
+        model |= Divide(denominator=2).connect(model.cout, output=IOKey("output"))
+        model._freeze()
+
+        return model
+
+
+class TestTwoLinears(CompareEvaluateTestBase):
+    def model1(self):
+        linear1 = Linear(dimension=4)
+        linear2 = Linear(dimension=7)
+
+        input = IOKey("input", shape=[3, 4, 5])
+
+        output = linear1(input=input)
+        output = linear2(input=output)
+
+        return Model.create(output=output)
+
+    def model2(self):
+        model = Model()
+
+        linear1 = Linear(dimension=4)
+        linear2 = Linear(dimension=7)
+
+        input = IOKey("input", shape=[3, 4, 4])
+
+        model |= linear1.connect(input=input)
+        model |= linear2.connect(input=model.cout, output=IOKey("output"))
+        model._freeze()
+
+        return model
+
+
+class TestExtendAndExtraction(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey()
+        input2 = IOKey()
+        input3 = IOKey()
+        mult_output = input1 * input2
+        output = mult_output + input3
+        assert output.model is not None
+        return output.model
+
+    def model2(self):
+        model = Model()
+        model |= (mult := Multiply())
+        model |= Add().connect(left=mult.output)
+        return model
+
+
+class TestExtendTwoConnections(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        output = input1 * input2
+        assert output.model is not None
+        return output.model
+
+    def model2(self):
+        model = Model()
+        model += Multiply().connect(left="input1", right="input2")
+        return model
+
+
+class TestExtendAndExtractionNamed(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        input3 = IOKey("input3")
+        mult_output = input1 * input2
+        output = mult_output + input3
+        assert output.model is not None
+        return output.model
+
+    def model2(self):
+        model = Model()
+        model |= (mult := Multiply()).connect(left="input1", right="input2")
+        model |= Add().connect(left=mult.output, right="input3")
+        return model
+
+
+class TestExtendAndExtractionViaExtendApi(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        input3 = IOKey("input3")
+        mult_output = input1 * input2
+        model = Model()
+        model |= Add().connect(left=mult_output, right=input3)
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= (mult := Multiply()).connect(left="input1", right="input2")
+        model |= Add().connect(left=mult.output, right="input3")
+        return model
+
+
+class TestExtendConnectionWithModel(ComparisonTestBase):
+    def model1(self):
+        add = Add()
+        input1 = IOKey()
+        output = add.output * input1
+        assert output.model is not None
+        return output.model
+
+    def model2(self):
+        model = Model()
+        model |= (add2 := Add())
+        model |= Multiply().connect(add2.output)
+        return model
+
+
+class TestExtendMultipleModels(ComparisonTestBase):
+    def model1(self):
+        add = Add()
+        input1 = IOKey()
+        add.output * input1
+
+        input2 = IOKey()
+        output2 = add.output * input2
+        assert output2.model is not None
+        return output2.model
+
+    def model2(self):
+        model = Model()
+        model |= (add2 := Add())
+        model |= Multiply().connect(add2.output)
+        model |= Multiply().connect(add2.output)
+        return model
+
+
+class TestExtendToModelConnectionNested(ComparisonTestBase):
+    def model1(self):
+        add = Add()
+        m1 = Model()
+        m1 |= add
+        m2 = Model()
+        m2 |= m1
+        m3 = Model()
+        m3 |= m2
+
+        input1 = IOKey()
+        output = add.output * input1
+        model = Model()
+        model |= m3
+        model |= Buffer().connect(output)
+        return model
+
+    def model2(self):
+        add = Add()
+        m1 = Model()
+        m1 |= add
+        m2 = Model()
+        m2 |= m1
+        m3 = Model()
+        m3 |= m2
+
+        model = Model()
+        model |= m3
+        model |= (mult := Multiply()).connect(add.output)
+        model |= Buffer().connect(mult.output)
+        return model
+
+
+class TestExtendAndExtractionSameInputs(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey()
+        input2 = IOKey()
+        add_output = input1 + input2
+        mult_output = input1 * input2
+        assert add_output.model == mult_output.model == input1.model == input2.model
+        return mult_output.model
+
+    def model2(self):
+        _input1 = IOKey()
+        _input2 = IOKey()
+
+        model = Model()
+        model |= Add().connect(left=_input1, right=_input2)
+        model |= Multiply().connect(left=_input1, right=_input2)
+        return model
+
+
+class TestExtendExtractionFrozenModels(ComparisonTestBase):
+    def model1(self):
+        add_output = Add().output * Add().output
+        mult_output = Add().output * Add().output
+        output = add_output + mult_output
+        assert output.model is not None
+        return output.model
+
+    def model2(self):
+        model = Model()
+        model |= (add1 := Add())
+        model |= (add2 := Add())
+        model |= (mult1 := Multiply()).connect(left=add2.output, right=add1.output)
+        model |= (add3 := Add())
+        model |= (add4 := Add())
+        model |= (mult2 := Multiply()).connect(left=add4.output, right=add3.output)
+        model |= Add().connect(left=mult2.output, right=mult1.output)
+        return model
+
+
+class TestExtendExtractionImmediateValues(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= (add := Add())
+        output = add.output + 2
+        model |= Buffer().connect(output)
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= (add1 := Add())
+        model |= (add2 := Add(right=2)).connect(left=add1.output)
+        model |= Buffer().connect(add2.output)
+        return model
+
+
+class TestExtendSingleFrozenSingleNonFrozenModel(ComparisonTestBase):
+    def model1(self):
+        model1 = Model()
+        model1 |= (add1 := Add())
+        model1._freeze()
+
+        model2 = Model()
+        model2 |= (add2 := Add())
+        model2 |= Buffer().connect(add1.output * add2.output)
+
+        return model2
+
+    def model2(self):
+        model1 = Model()
+        model1 |= (_add1 := Add())
+        model1._freeze()
+
+        model2 = Model()
+        model2 |= model1
+        model2 |= (_add2 := Add())
+        model2 |= (mult := Multiply()).connect(left=_add2.output, right=_add1.output)
+        model2 |= Buffer().connect(mult.output)
+
+        return model2
+
+
+class TestExtendNonFrozenModelFrozenModel(ComparisonTestBase):
+    def model1(self):
+        out1 = IOKey("out1")
+        out2 = IOKey("out2")
+
+        model1 = Model()
+        model1 |= Add().connect(output=out1)
+        model2 = Model()
+        model2 |= Add().connect(output=out2)
+        model2._freeze()
+
+        output = out1 + out2
+        model1 |= Buffer().connect(output)
+        return model1
+
+    def model2(self):
+        out1 = IOKey("out1")
+        out2 = IOKey("out2")
+        model1 = Model()
+        model1 |= (add := Add()).connect(output=out1)
+        model2 = Model()
+        model2 |= Add().connect(output=out2)
+
+        model1 |= model2
+        model1 |= (add := Add()).connect(out1, out2)
+        model1 |= Buffer().connect(add.output)
+
+        return model1
+
+
+class TestExtendCheckMetadata(ComparisonTestBase):
+    def model1(self):
+        weight_key = IOKey("weight")
+        t_w = weight_key.transpose()
+        m = Model()
+        m |= Buffer().connect(t_w)
+        assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
+
+        model = Model()
+        model |= m.connect(weight=IOKey("weight"))
+        assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
+        return model
+
+    def model2(self):
+        weight_key = IOKey("weight")
+        m = Model()
+        m |= Transpose().connect(weight_key)
+        m += Buffer()
+        assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
+
+        model = Model()
+        model |= m.connect(weight=IOKey("weight"))
+        assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
+        return model
+
+
+class TestExtendProvisionalModel(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= Add().connect(left="left", right="right", output="output")
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= Add().connect(left="left", right="right", output="output")
+        model.output**2  # type: ignore
+        return model
+
+
+class TestExtendProvisionalModel2(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= Add().connect(left="left", right="right", output="output")
+        pow = model.output**2  # type: ignore
+        assert pow.model.provisional_source == model
+        buf_model = Buffer()
+        model |= buf_model.connect(pow)
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= Add().connect(left="left", right="right", output="output")
+        model |= Power().connect(model.output, 2)  # type: ignore
+        model += Buffer()
+        return model
+
+
+class TestExtendConcat(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= (buff1 := Buffer())
+        model |= (buff2 := Buffer())
+        buff1_1d = buff1.output.atleast_1d()
+        buff2_1d = buff2.output.atleast_1d()
+        model |= Concat().connect(input=[buff1_1d, buff2_1d])
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= (buff1 := Buffer())
+        model |= (buff2 := Buffer())
+        model |= (buff1_1d := AtLeast1D()).connect(buff1.output)
+        model |= (buff2_1d := AtLeast1D()).connect(buff2.output)
+        model |= (list_m := ToList(2)).connect(
+            input1=buff1_1d.output, input2=buff2_1d.output
+        )
+        model |= Concat().connect(input=list_m.output)
+        return model
+
+
+class TestExtendOnlyDependentSubmodels(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= (buff1 := Buffer())
+        a = buff1.output**2
+        b = buff1.output / 3
+        c = a + 4
+        assert a.model is b.model is c.model and a.model is not None
+        provisional_model = b.model
+        assert provisional_model is not None
+        dag = provisional_model.dag
+        assert {m.__class__.__name__ for m in dag} == {"PowerOp", "AddOp", "DivideOp"}
+
+        model |= Buffer().connect(c)
+
+        assert b.model is provisional_model
+        return model
+
+    def model2(self):
+        model = Model()
+        model |= (buff := Buffer())
+        model |= (pow := Power()).connect(buff.output, 2)
+        model |= (add := Add()).connect(pow.output, 4)
+        model |= Buffer().connect(add.output)
+        return model
+
+
+class TestExtendMergeWhileProvisionalModelCreated(ComparisonTestBase):
+    def model1(self):
+        model = Model()
+        model |= (add := Add())
+        a = add.output**2
+        _ = add.output / 3
+        c = a + 4
+        model.merge_connections(add.left, add.right)
+        model |= Buffer().connect(c)
+        return model
+
+    def model2(self):
+        con = IOKey()
+        model = Model()
+        model |= (add := Add()).connect(con, con)
+        model |= (pow := Power()).connect(add.output, 2)
+        model |= (add := Add()).connect(pow.output, 4)
+        model |= Buffer().connect(add.output)
+        return model
+
+
+class TestFunctionalModel(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = Add()(input1, input2)
+        x = Multiply()(x, x)
+        x = x**2  # type: ignore
+        assert x.model is not None
+        return x.model
+
+    def model2(self):
+        model = Model()
+        model |= (add := Add()).connect("input1", "input2")
+        model |= (mult := Multiply()).connect(add.output, add.output)
+        model |= Power().connect(mult.output, 2)
+        return model
+
+
+class TestFunctionalModelWithLinear(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = Add()(left=input1, right=input2)
+        x = Multiply()(left=x, right=x)
+        x = x**2  # type: ignore
+        x = Linear()(input=x)
+        return x.model.parent  # type: ignore
+
+    def model2(self):
+        model = Model()
+        model |= (add := Add()).connect("input1", "input2")
+        model |= (mult := Multiply()).connect(add.output, add.output)
+        model |= (pow := Power()).connect(mult.output, 2)
+        model |= Linear().connect(input=pow.output)
+        return model
+
+
+class TestExposingExistingOutputConnection(ComparisonTestBase):
+    def model1(self):
+        input = IOKey("input")
+        out = Buffer()(input=input)
+        a = out**2
+        return Model.create(output=a, buff_out=out)
+
+    def model2(self):
+        # TODO: Remove set_cout from second model after fixing the issue with couts.
+        model = Model()
+        model |= (buff := Buffer()).connect("input", "buff_out")
+        model |= Power(exponent=2).connect(buff.output, output="output")
+        model.expose_keys("output", "buff_out")
+        model.set_cout("output", "buff_out")
+        model._freeze()
+        return model
+
+
+class TestFunctionalModelWithCreateApi(ComparisonTestBase):
+    skip_flat_graph_assertion = (True, "output is not named so compile raises error")
+
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = Add()(left=input1, right=input2)
+        x = Multiply()(left=x, right=x)
+        x = x**2  # type: ignore
+        x = Linear()(input=x)
+        return Model.create(x)  # type: ignore
+
+    def model2(self):
+        model = Model()
+        model |= (add := Add()).connect("input1", "input2")
+        model |= (mult := Multiply()).connect(add.output, add.output)
+        model |= (pow := Power(exponent=2)).connect(mult.output)
+        model |= Linear().connect(input=pow.output)
+        model._freeze()
+        return model
+
+
+class TestFunctionalModelWithCreateApiNoKeyNamings(ComparisonTestBase):
+    skip_flat_graph_assertion = (True, "output is not named so compile raises error")
+
+    def model1(self):
+        input1 = IOKey()
+        input2 = IOKey()
+        x = Add()(left=input1, right=input2)
+        x = Multiply()(left=x, right=x)
+        x = x**2  # type: ignore
+        x = Linear()(input=x)
+        return Model.create(x)  # type: ignore
+
+    def model2(self):
+        model = Model()
+        model |= (add := Add())
+        model |= (mult := Multiply()).connect(add.output, add.output)
+        model |= (pow := Power(exponent=2)).connect(mult.output)
+        model |= Linear().connect(input=pow.output)
+        model._freeze()
+        return model
+
+
+class TestFunctionalModelWithCreateApiWithImmediateInCall(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey()
+        x = Add()(left=input1, right=3)
+        x = Multiply()(left=x, right=x)
+        x = x**2  # type: ignore
+        x = Linear()(input=x)
+        return Model.create(output=x)
+
+    def model2(self):
+        model = Model()
+        model |= (add := Add(right=3)).connect()
+        model |= (mult := Multiply()).connect(add.output, add.output)
+        model |= (pow := Power(exponent=2)).connect(mult.output)
+        model |= Linear().connect(input=pow.output, output=IOKey("output"))
+        model._freeze()
+        return model
+
+
+class TestFunctionalModelWithCreateApiWithImmediateInModelInit(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey()
+        x = Add(right=3)(left=input1)
+        return Model.create(output=x)  # type: ignore
+
+    def model2(self):
+        model = Model()
+        model |= Add(right=3).connect(output=IOKey("output"))
+        model._freeze()
+        return model
+
+
+class TestFunctionalPartialModelCreation1(ComparisonTestBase):
+    def model1(self):
+        input = IOKey("input")
+        t_input = Transpose(axes=(0, 2, 3, 1))(input=input)  # type: ignore
+        _ = t_input**2
+        b_out = Buffer()(input=t_input)
+        return Model.create(output=b_out)
+
+    def model2(self):
+        input = IOKey("input")
+        t_input = input.transpose((0, 2, 3, 1))
+        _ = t_input**2
+        model = Model()
+        model |= Buffer().connect(input=t_input, output=IOKey("output"))
+        model._freeze()
+        return model
+
+
+class TestFunctionalPartialModelCreation2(ComparisonTestBase):
+    def model1(self):
+        input = IOKey("input")
+        t_input = Transpose(axes=(0, 2, 3, 1))(input=input)  # type: ignore
+        _ = t_input**2
+        b_out = Buffer()(input=t_input)
+        return Model.create(output=b_out)
+
+    def model2(self):
+        input = IOKey("input")
+        t_input = input.transpose((0, 2, 3, 1))
+        _ = t_input**2
+        b_out = Buffer()(input=t_input)
+        return Model.create(output=b_out)
+
+
+class TestFunctionalModelUnnamedInputkeys(ComparisonTestBase):
+    def model1(self):
+        x = IOKey("input", shape=[None, 512, None, None])
+        normalized = GroupNorm(num_groups=32, eps=1e-6, name="norm")(x)
+        return Model.create(normalized=normalized)
+
+    def model2(self):
+        x = IOKey("input", shape=[None, 512, None, None])
+        model = Model()
+        model |= GroupNorm(num_groups=32, eps=1e-6, name="norm").connect(
+            x, "normalized"
+        )
+        model._freeze()
+        return model
+
+
+class TestFunctionalModelNaming(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = my_lin(input1, input2, name="my_lin")
+        model = Model.create(output=x)
+        assert list(model.dag)[0].name == "my_lin"
+        return model
+
+    def model2(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = my_lin(input1, input2)
+        model = Model.create(output=x)
+        return model
+
+
+class TestFunctionalModelWithCallConcat(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        x = Concat()(input=[input1**2, Add(right=1)(input2)])
+        return Model.create(output=x)
+
+    def model2(self):
+        model = Model()
+        model |= (pow := Power(exponent=2)).connect("input1")
+        model |= (add := Add(right=1)).connect("input2")
+        model |= Concat().connect(
+            input=[pow.output, add.output], output=IOKey("output")
+        )
+        model._freeze()
+        return model
+
+
+class TestFunctionalAttnBlock(ComparisonTestBase):
+    n_channels = 512
+    skip_flat_graph_assertion = (True, "discuss flat graph assertion in this test")
+
+    def model1(self):
+        return attn_block_functional(self.n_channels)
+
+    def model2(self):
+        model = attn_block_with_connect(self.n_channels)
+        model._freeze()
+        return model
+
+
+class TestFunctionalEuclideanDistance(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        output = (input1**2 + input2**2) ** (1 / 2)
+        model = Model.create(output=output, name="euc_distance")
+
+        output = model(IOKey("input1"), IOKey("input2"))
+
+        return Model.create(output=output)
+
+    def model2(self):
+        @functional
+        def euc_distance(input1: IOKey, input2: IOKey):
+            return (input1**2 + input2**2) ** (1 / 2)
+
+        output = euc_distance(IOKey("input1"), IOKey("input2"))
+
+        return Model.create(output=output)
+
+
+class TestFunctionalEuclideanDistanceKeyworded(ComparisonTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        output = (input1**2 + input2**2) ** (1 / 2)
+        model = Model.create(output=output, name="euc_distance")
+
+        output = model(IOKey("input1"), IOKey("input2"))
+
+        return Model.create(output=output)
+
+    def model2(self):
+        @functional
+        def euc_distance(input1: IOKey, input2: IOKey):
+            return (input1**2 + input2**2) ** (1 / 2)
+
+        output = euc_distance(IOKey("input1"), input2=IOKey("input2"))
+
+        return Model.create(output=output)
+
+
+class TestFunctionalEuclideanDistanceNestedEvaluate(CompareEvaluateTestBase):
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+        output = (input1**2 + input2**2) ** (1 / 2)
+
+        model1 = Model.create(output=output, name="euc_distance_1")
+        model2 = deepcopy(model1)
+        model2.name = "euc_distance_2"
+
+        output1 = model1(input1=IOKey("input1"), input2=IOKey("input2"))
+        output2 = model2(input1=IOKey("input3"), input2=IOKey("input4"))
+
+        output = (output1**2 + output2**2) ** (1 / 2)
+
+        model = Model.create(output=output, name="nested_euc_distance")
+
+        output = model(
+            input1=IOKey("input1", shape=[5, 10]),
+            input2=IOKey("input2", shape=[5, 10]),
+            input3=IOKey("input3", shape=[5, 10]),
+            input4=IOKey("input4", shape=[5, 10]),
+        )
+
+        return Model.create(output=output)
+
+    def model2(self):
+        @functional
+        def euc_distance(input1: IOKey, input2: IOKey):
+            return (input1**2 + input2**2) ** (1 / 2)
+
+        @functional
+        def nested_euc_distance(
+            input1: IOKey, input2: IOKey, input3: IOKey, input4: IOKey
+        ):
+            output1 = euc_distance(input1, input2)
+            output2 = euc_distance(input3, input4)
+            return (output1**2 + output2**2) ** (1 / 2)
+
+        output = nested_euc_distance(
+            IOKey("input1", shape=[5, 10]),
+            IOKey("input2", shape=[5, 10]),
+            IOKey("input3", shape=[5, 10]),
+            IOKey("input4", shape=[5, 10]),
+        )
+
+        return Model.create(output=output)
+
+
+class TestAttnBlockFunctionalVsDecorator(CompareEvaluateTestBase):
+    n_channels: int = 512
+
+    def model1(self):
+        model = attn_block_functional(self.n_channels, name="attn-block_with_decorator")
+        output = model(input=IOKey("input", shape=[2, 512, 32, 32]))
+        new_model = Model.create(output=output, name="attn_block")
+        return new_model
+
+    def model2(self):
+        input = IOKey("input", shape=[2, 512, 32, 32])
+        output = attn_block_with_decorator(input, n_channels=self.n_channels)
+        model = Model.create(output=output, name="attn_block")
+        return model
+
+
+class TestFunctionalWithTwoOutputs(CompareEvaluateTestBase):
+    n_channels: int = 512
+
+    def model1(self):
+        input1 = IOKey("input1")
+        input2 = IOKey("input2")
+
+        output1 = ((input1 * input2) ** 2) * 7
+        output2 = ((input1 - input2) + 3) ** 2
+
+        model = Model.create(output1=output1, output2=output2)
+        out1, out2 = model(IOKey("input1"), IOKey("input2"))  # type: ignore
+        return Model.create(output1=out1, output2=out2)  # type: ignore
+
+    def model2(self):
+        @functional
+        def model(input1: IOKey, input2: IOKey):
+            output1 = ((input1 * input2) ** 2) * 7
+            output2 = ((input1 - input2) + 3) ** 2
+            return output1, output2
+
+        out1, out2 = model(IOKey("input1"), input2=IOKey("input2"))
+        return Model.create(output1=out1, output2=out2)
+
+
+def test_extend_metadata_linear():
+    lin1 = Linear()
+    assert list(lin1.dag.keys())[0].input.metadata is lin1.weight.metadata  # type: ignore
+
+    model = Model()
+    model += lin1.connect(weight=IOKey("w"))
+    assert list(lin1.dag.keys())[0].input.metadata is lin1.weight.metadata  # type: ignore
+    assert lin1.weight.metadata is model.w.metadata  # type: ignore
 
 
 def test_extend_canonicals_for_main_model():
@@ -64,17 +937,6 @@ def test_extend_canonicals_for_extract_model():
     assert output.model.cout.metadata == mult_model.output.metadata  # type: ignore
 
 
-def test_extend_two_connections():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    output = input1 * input2
-
-    model = Model()
-    model += Multiply().connect(left="input1", right="input2")
-    assert output.model is not None
-    assert_models_equal(output.model, model)
-
-
 def test_extend_error_shp_mismatch():
     input1 = IOKey("input1", shape=[3, 3])
     input2 = IOKey("input2", shape=[3, 2])
@@ -85,176 +947,6 @@ def test_extend_error_shp_mismatch():
         str(err.value)
         == "Inputs shape mismatch at dimension 1. Shapes are inconsistent."
     )
-
-
-def test_extend_and_extraction():
-    input1 = IOKey()
-    input2 = IOKey()
-    input3 = IOKey()
-    mult_output = input1 * input2
-    output = mult_output + input3
-
-    model = Model()
-    model |= (mult := Multiply())
-    model |= Add().connect(left=mult.output)
-    assert output.model is not None
-    assert_models_equal(output.model, model)
-
-
-def test_extend_and_extraction_named():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    input3 = IOKey("input3")
-    mult_output = input1 * input2
-    output = mult_output + input3
-
-    model = Model()
-    model |= (mult := Multiply()).connect(left="input1", right="input2")
-    model |= Add().connect(left=mult.output, right="input3")
-    assert output.model is not None
-    assert_models_equal(output.model, model)
-
-
-def test_extend_and_extraction_via_extend_api():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    input3 = IOKey("input3")
-    mult_output = input1 * input2
-    model1 = Model()
-    model1 |= Add().connect(left=mult_output, right=input3)
-
-    model2 = Model()
-    model2 |= (mult := Multiply()).connect(left="input1", right="input2")
-    model2 |= Add().connect(left=mult.output, right="input3")
-    assert_models_equal(model1, model2)
-
-
-def test_extend_connection_with_model():
-    add = Add()
-    input1 = IOKey()
-    output = add.output * input1
-
-    model = Model()
-    model |= (add2 := Add())
-    model |= Multiply().connect(add2.output)
-    assert output.model is not None
-    assert_models_equal(output.model, model)
-
-
-def test_extend_multiple_models():
-    add = Add()
-    input1 = IOKey()
-    add.output * input1
-
-    input2 = IOKey()
-    output2 = add.output * input2
-
-    model = Model()
-    model |= (add2 := Add())
-    model |= Multiply().connect(add2.output)
-    model |= Multiply().connect(add2.output)
-    assert output2.model is not None
-    assert_models_equal(output2.model, model)
-
-
-def test_extend_to_model_connection_nested():
-    add = Add()
-    m1 = Model()
-    m1 |= add
-    m2 = Model()
-    m2 |= m1
-    m3 = Model()
-    m3 |= m2
-
-    input1 = IOKey()
-    output = add.output * input1
-    model = Model()
-    model |= m3
-    model |= Buffer().connect(output)
-
-    _add = Add()
-    _m1 = Model()
-    _m1 |= _add
-    _m2 = Model()
-    _m2 |= _m1
-    _m3 = Model()
-    _m3 |= _m2
-
-    _model = Model()
-    _model |= _m3
-    _model |= (mult := Multiply()).connect(_add.output)
-    _model |= Buffer().connect(mult.output)
-    assert_models_equal(model, _model)
-
-
-def test_extend_and_extraction_same_inputs():
-    input1 = IOKey()
-    input2 = IOKey()
-    add_output = input1 + input2
-    mult_output = input1 * input2
-    assert add_output.model == mult_output.model == input1.model == input2.model
-
-    _input1 = IOKey()
-    _input2 = IOKey()
-
-    model = Model()
-    model |= Add().connect(left=_input1, right=_input2)
-    model |= Multiply().connect(left=_input1, right=_input2)
-    assert_models_equal(model, mult_output.model)  # type: ignore
-
-
-def test_extend_extraction_frozen_models():
-    add_output = Add().output * Add().output
-    mult_output = Add().output * Add().output
-    output = add_output + mult_output
-
-    model = Model()
-    model |= (add1 := Add())
-    model |= (add2 := Add())
-    model |= (mult1 := Multiply()).connect(left=add1.output, right=add2.output)
-    model |= (add3 := Add())
-    model |= (add4 := Add())
-    model |= (mult2 := Multiply()).connect(left=add3.output, right=add4.output)
-    model |= Add().connect(left=mult1.output, right=mult2.output)
-    assert output.model is not None
-    assert_models_equal(model, output.model)
-
-
-def test_extend_extraction_immediate_values():
-    model = Model()
-    model |= (add := Add())
-    output = add.output + 2
-    model |= Buffer().connect(output)
-
-    model1 = Model()
-    model1 |= (add1 := Add())
-    model1 |= (add2 := Add()).connect(left=add1.output, right=2)
-    model1 |= Buffer().connect(add2.output)
-
-    assert output.model is not None
-    assert_models_equal(model1, model)
-
-
-def test_extend_single_frozen_single_non_frozen_model():
-    model1 = Model()
-    model1 |= (add1 := Add())
-    model1._freeze()
-
-    model2 = Model()
-    model2 |= (add2 := Add())
-    model2 |= Buffer().connect(add1.output * add2.output)
-
-    _model1 = Model()
-    _model1 |= (_add1 := Add())
-    _model1._freeze()
-
-    _model2 = Model()
-    _model2 |= _model1
-    _model2 |= (_add2 := Add())
-    _model2 |= (mult := Multiply()).connect(left=_add1.output, right=_add2.output)
-    _model2 |= Buffer().connect(mult.output)
-
-    assert_models_equal(_model2, model2)
 
 
 def test_extend_test_extend_multiple_non_frozen_models_error():
@@ -281,146 +973,6 @@ def test_extend_test_extend_multiple_non_frozen_models_with_connection_error():
     with pytest.raises(ValueError) as err:
         out1 + out2
     assert str(err.value) == "Multiple non-frozen active models found in connections!"
-
-
-def test_extend_non_frozen_model_and_frozen_model():
-    out1 = IOKey("out1")
-    out2 = IOKey("out2")
-
-    model1 = Model()
-    model1 |= Add().connect(output=out1)
-    model2 = Model()
-    model2 |= Add().connect(output=out2)
-    model2._freeze()
-
-    output = out1 + out2
-    model1 |= Buffer().connect(output)
-
-    _out1 = IOKey("out1")
-    _out2 = IOKey("out2")
-    _model1 = Model()
-    _model1 |= (add := Add()).connect(output=_out1)
-    _model2 = Model()
-    _model2 |= Add().connect(output=_out2)
-
-    _model1 |= _model2
-    _model1 |= (add := Add()).connect(_out1, _out2)
-    _model1 |= Buffer().connect(add.output)
-    assert_models_equal(model1, _model1)  # type: ignore
-
-
-def test_extend_check_metadata():
-    weight_key = IOKey("weight")
-    t_w = weight_key.transpose()
-    m = Model()
-    m |= Buffer().connect(t_w)
-    assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
-
-    model = Model()
-    model |= m.connect(weight=IOKey("weight"))
-    assert list(m.dag.keys())[0].input.metadata == m.weight.metadata  # type: ignore
-
-    _weight_key = IOKey("weight")
-    _m = Model()
-    _m |= Transpose().connect(_weight_key)
-    _m += Buffer()
-    assert list(_m.dag.keys())[0].input.metadata == _m.weight.metadata  # type: ignore
-
-    _model = Model()
-    _model |= _m.connect(weight=IOKey("weight"))
-    assert list(_m.dag.keys())[0].input.metadata == _m.weight.metadata  # type: ignore
-
-    assert_models_equal(model, _model)
-
-
-def test_extend_metadata_linear():
-    lin1 = Linear()
-    assert list(lin1.dag.keys())[0].input.metadata is lin1.weight.metadata  # type: ignore
-
-    model = Model()
-    model += lin1.connect(weight=IOKey("w"))
-    assert list(lin1.dag.keys())[0].input.metadata is lin1.weight.metadata  # type: ignore
-    assert lin1.weight.metadata is model.w.metadata  # type: ignore
-
-
-def test_extend_provisional_model():
-    model = Model()
-    model |= Add().connect(left="left", right="right", output="output")
-    _model = deepcopy(model)
-    pow = model.output**2  # type: ignore
-    assert_models_equal(model, _model)
-
-    assert pow.model.provisional_source == model
-    buf_model = Buffer()
-    model |= buf_model.connect(pow)
-
-    model2 = Model()
-    model2 |= Add().connect(left="left", right="right", output="output")
-    model2 |= Power().connect(model2.output, 2)  # type: ignore
-    model2 += Buffer()
-    assert_models_equal(model, model2)
-
-
-def test_extend_concat():
-    model = Model()
-    model |= (buff1 := Buffer())
-    model |= (buff2 := Buffer())
-    buff1_1d = buff1.output.atleast_1d()
-    buff2_1d = buff2.output.atleast_1d()
-    model |= Concat().connect(input=[buff1_1d, buff2_1d])
-
-    _model = Model()
-    _model |= (_buff1 := Buffer())
-    _model |= (_buff2 := Buffer())
-    _model |= (_buff1_1d := AtLeast1D()).connect(_buff1.output)
-    _model |= (_buff2_1d := AtLeast1D()).connect(_buff2.output)
-    _model |= (list_m := ToList(2)).connect(
-        input1=_buff1_1d.output, input2=_buff2_1d.output
-    )
-    _model |= Concat().connect(input=list_m.output)
-    assert_models_equal(model, _model)
-
-
-def test_extend_only_dependent_submodels():
-    model = Model()
-    model |= (buff1 := Buffer())
-    a = buff1.output**2
-    b = buff1.output / 3
-    c = a + 4
-    assert a.model is b.model is c.model and a.model is not None
-    provisional_model = b.model
-    assert provisional_model is not None
-    dag = provisional_model.dag
-    assert {m.__class__.__name__ for m in dag} == {"PowerOp", "AddOp", "DivideOp"}
-
-    model |= Buffer().connect(c)
-
-    assert b.model is provisional_model
-
-    _model = Model()
-    _model |= (buff := Buffer())
-    _model |= (pow := Power()).connect(buff.output, 2)
-    _model |= (add := Add()).connect(pow.output, 4)
-    _model |= Buffer().connect(add.output)
-    assert_models_equal(model, _model)
-
-
-def test_extend_merge_while_provisional_model_created():
-    model = Model()
-    model |= (add := Add())
-    a = add.output**2
-    _ = add.output / 3
-    c = a + 4
-    model.merge_connections(add.left, add.right)
-    model |= Buffer().connect(c)
-
-    con = IOKey()
-    _model = Model()
-    _model |= (add := Add()).connect(con, con)
-    _model |= (pow := Power()).connect(add.output, 2)
-    _model |= (add := Add()).connect(pow.output, 4)
-    _model |= Buffer().connect(add.output)
-    assert_models_equal(model, _model)
 
 
 def test_extend_error_by_constraint_solver():
@@ -686,161 +1238,6 @@ def test_existing_cons_model_attribute_maps_to_model():
     assert input_key.model is not None
 
 
-def test_functional_model():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = Add()(input1, input2)
-    x = Multiply()(x, x)
-    x = x**2  # type: ignore
-
-    model = Model()
-    model |= (add := Add()).connect("input1", "input2")
-    model |= (mult := Multiply()).connect(add.output, add.output)
-    model |= Power().connect(mult.output, 2)
-
-    assert x.model is not None
-    assert_models_equal(x.model, model)
-
-
-def test_functional_model_with_lin():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = Add()(left=input1, right=input2)
-    x = Multiply()(left=x, right=x)
-    x = x**2  # type: ignore
-    x = Linear()(input=x)
-
-    model = Model()
-    model |= (add := Add()).connect("input1", "input2")
-    model |= (mult := Multiply()).connect(add.output, add.output)
-    model |= (pow := Power()).connect(mult.output, 2)
-    model |= Linear().connect(input=pow.output)
-
-    assert_models_equal(x.model.parent, model)  # type: ignore
-
-
-# TODO: Remove set_cout from second model after fixing the issue with couts.
-def test_exposing_existing_output_connection():
-    input = IOKey("input")
-    out = Buffer()(input=input)
-    a = out**2
-    m = Model.create(output=a, buff_out=out)
-
-    model = Model()
-    model |= (buff := Buffer()).connect("input", "buff_out")
-    model |= Power(exponent=2).connect(buff.output, output="output")
-    model.expose_keys("output", "buff_out")
-    model.set_cout("output", "buff_out")
-    model._freeze()
-
-    assert_models_equal(m, model)  # type: ignore
-
-
-def test_functional_model_with_create_api():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = Add()(left=input1, right=input2)
-    x = Multiply()(left=x, right=x)
-    x = x**2  # type: ignore
-    x = Linear()(input=x)
-    f_model = Model.create(x)  # type: ignore
-
-    model = Model()
-    model |= (add := Add()).connect("input1", "input2")
-    model |= (mult := Multiply()).connect(add.output, add.output)
-    model |= (pow := Power(exponent=2)).connect(mult.output)
-    model |= Linear().connect(input=pow.output)
-    model._freeze()
-
-    assert_models_equal(f_model, model)
-
-
-def test_functional_model_with_create_api_no_key_namings():
-    input1 = IOKey()
-    input2 = IOKey()
-    x = Add()(left=input1, right=input2)
-    x = Multiply()(left=x, right=x)
-    x = x**2  # type: ignore
-    x = Linear()(input=x)
-    f_model = Model.create(x)  # type: ignore
-
-    model = Model()
-    model |= (add := Add())
-    model |= (mult := Multiply()).connect(add.output, add.output)
-    model |= (pow := Power(exponent=2)).connect(mult.output)
-    model |= Linear().connect(input=pow.output)
-    model._freeze()
-
-    assert_models_equal(f_model, model)
-
-
-def test_functional_model_with_create_api_with_immediate_in_call():
-    input1 = IOKey()
-    x = Add()(left=input1, right=3)
-    x = Multiply()(left=x, right=x)
-    x = x**2  # type: ignore
-    x = Linear()(input=x)
-    f_model = Model.create(x)  # type: ignore
-
-    model = Model()
-    model |= (add := Add(right=3)).connect()
-    model |= (mult := Multiply()).connect(add.output, add.output)
-    model |= (pow := Power(exponent=2)).connect(mult.output)
-    model |= Linear().connect(input=pow.output)
-    model._freeze()
-
-    assert_models_equal(f_model, model)
-
-
-def test_functional_model_with_create_api_with_immediate_in_model_init():
-    input1 = IOKey()
-    x = Add(right=3)(left=input1)
-    f_model = Model.create(x)  # type: ignore
-
-    model = Model()
-    model |= Add(right=3)
-    model._freeze()
-
-    assert_models_equal(f_model, model)
-
-
-def test_functional_partial_model_creation():
-    input = IOKey("input")
-    t_input = input.transpose((0, 2, 3, 1))
-    _ = t_input**2
-    model = Model()
-    model |= Buffer().connect(input=t_input)
-    model._freeze()
-
-    input = IOKey("input")
-    t_input = Transpose(axes=(0, 2, 3, 1))(input=input)  # type: ignore
-    _ = t_input**2
-    b_out = Buffer()(input=t_input)
-    functional_model = Model.create(b_out)  # type: ignore
-
-    input = IOKey("input")
-    t_input = input.transpose((0, 2, 3, 1))
-    _ = t_input**2
-    b_out = Buffer()(input=t_input)
-    functional_model2 = Model.create(b_out)  # type: ignore
-
-    assert_models_equal(functional_model, model)
-    assert_models_equal(functional_model2, model)
-
-
-def test_functional_model_unnamed_input_keys():
-    x = IOKey("input", shape=[None, 512, None, None])
-    normalized = GroupNorm(num_groups=32, eps=1e-6, name="norm")(x)
-    functional_model = Model.create(normalized=normalized)  # type: ignore
-
-    x = IOKey("input", shape=[None, 512, None, None])
-    model = Model()
-    model |= GroupNorm(num_groups=32, eps=1e-6, name="norm").connect(x, "normalized")
-    model._freeze()
-
-    assert_models_equal(functional_model, model)
-
-
 def attn_block_functional(n_channels: int, *, name: str | None = None):
     # Keep the original input for the residual connection.
     x = IOKey("input", shape=[None, 512, None, None])
@@ -862,7 +1259,26 @@ def attn_block_functional(n_channels: int, *, name: str | None = None):
     return Model.create(output=proj_out + x, name=name)  # type: ignore
 
 
-def attn_block(n_channels: int, *, name: str | None = None):
+@functional
+def attn_block_with_decorator(input: IOKey, *, n_channels: int):
+    normalized = GroupNorm(num_groups=32, eps=1e-6, name="norm")(input=input)
+    query = Convolution2D(1, n_channels, name="q")(input=normalized)
+    key = Convolution2D(1, n_channels, name="k")(input=normalized)
+    value = Convolution2D(1, n_channels, name="v")(input=normalized)
+    shape = query.shape  # type: ignore
+
+    query = query.transpose((0, 2, 3, 1)).reshape((shape[0], 1, -1, shape[1]))  # type: ignore
+    key = key.transpose((0, 2, 3, 1)).reshape((shape[0], 1, -1, shape[1]))  # type: ignore
+    value = value.transpose((0, 2, 3, 1)).reshape((shape[0], 1, -1, shape[1]))  # type: ignore
+    sdp_out = ScaledDotProduct(is_causal=False)(query=query, key=key, value=value)
+
+    reshaped = Reshape()(input=sdp_out, shape=(shape[0], shape[2], shape[3], shape[1]))
+    transposed = Transpose(axes=(0, 3, 1, 2))(input=reshaped)
+    proj_out = Convolution2D(1, n_channels, name="proj_out")(input=transposed)
+    return proj_out + input
+
+
+def attn_block_with_connect(n_channels: int, *, name: str | None = None):
     block = Model(name=name)
     block |= GroupNorm(num_groups=32, eps=1e-6, name="norm").connect(
         IOKey("input", shape=[None, 512, None, None]), "normalized"
@@ -897,14 +1313,6 @@ def attn_block(n_channels: int, *, name: str | None = None):
     return block
 
 
-def test_functional_attn_block():
-    n_channels = 512
-    functional_model = attn_block_functional(n_channels)
-    model = attn_block(n_channels)
-    model._freeze()
-    assert_models_equal(functional_model, model)
-
-
 @functional
 def my_lin(left, right):
     scale = IOKey("scale")
@@ -919,23 +1327,6 @@ def manual_functional_lin(left, right, name: str | None = None):
     m.rename_key(_l, "left")
     m.rename_key(_r, "right")
     return m(left, right)
-
-
-def test_functional_model_naming():
-    # Functional API with name
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = my_lin(input1, input2, name="my_lin")
-    functional_model = Model.create(x)
-    assert list(functional_model.dag)[0].name == "my_lin"
-
-    # Functional API without name
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = my_lin(input1, input2)
-    functional_model_no_name = Model.create(x)
-    assert list(functional_model_no_name.dag)[0].name == "my_lin"
-    assert_models_equal(functional_model, functional_model_no_name)
 
 
 def test_functional_model_with_decorator():
@@ -1006,22 +1397,6 @@ def test_functional_model_with_decorator_nested():
     parent_model._freeze()
 
     assert_models_equal(functional_model, parent_model)
-
-
-def test_functional_model_with_call_concat():
-    input1 = IOKey("input1")
-    input2 = IOKey("input2")
-    x = Concat()(input=[input1**2, Add(right=1)(input2)])
-    functional_model = Model.create(x)
-
-    # Equivalent model using the |= operator
-    model = Model()
-    model |= (pow := Power(exponent=2)).connect("input1")
-    model |= (add := Add(right=1)).connect("input2")
-    model |= Concat().connect(input=[pow.output, add.output])
-    model._freeze()
-
-    assert_models_equal(functional_model, model)  # type: ignore
 
 
 def test_model_create_output_order():

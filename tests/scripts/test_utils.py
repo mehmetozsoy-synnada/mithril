@@ -16,7 +16,7 @@ import inspect
 import re
 from collections.abc import Callable, Mapping, Sequence
 from types import EllipsisType
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 
@@ -38,6 +38,7 @@ from mithril.framework.common import (
 )
 from mithril.framework.logical import BaseModel, Model, Operator
 from mithril.framework.physical import PhysicalModel
+from mithril.framework.physical.flat_graph import FlatGraph
 from mithril.models.train_model import TrainModel
 from mithril.utils.dict_conversions import dict_to_model, model_dict
 from mithril.utils.type_utils import is_list_int
@@ -722,3 +723,24 @@ def assert_shape_results(
                     extract_variadic_possibles(root, assignments, uni_cache, var_cache)
 
     check_shapes_semantically(shapes, ref_results, assignments, ref_assignments)
+
+
+class OpType(TypedDict):
+    op: str
+    input_keys: list[str]
+    output_key: str
+
+
+def normalize_flat_graph(flat_graph: FlatGraph[Any]) -> list[OpType]:
+    normalized_list: list[OpType] = []
+    for output_key in flat_graph.topological_order:
+        connection = flat_graph.connections[output_key]
+        assert connection.op is not None
+
+        op_dict: OpType = {
+            "op": connection.op.default_name,
+            "input_keys": connection.source_keys,
+            "output_key": output_key,
+        }
+        normalized_list.append(op_dict)
+    return normalized_list
